@@ -31,7 +31,7 @@ fi
 # Check if node_modules exists
 if [ ! -d "$VIEWER_DIR/node_modules" ]; then
     echo "Installing viewer dependencies..."
-    cd "$VIEWER_DIR" && npm install
+    cd "$VIEWER_DIR" && pnpm install
 fi
 
 echo ""
@@ -42,4 +42,4 @@ echo "Starting development server on http://localhost:$PORT"
 echo ""
 
 cd "$VIEWER_DIR"
-npm run dev -- --port $PORT --strictPort --open
+pnpm dev --port $PORT --strictPort --open
