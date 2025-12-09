@@ -488,6 +488,78 @@ def _classify_blocks(blocks: list[Block]):
         block.field_type, block.confidence = _infer_type(block.value)
 
 
+def _infer_numeric_type(value: int | float) -> tuple[str, float]:
+    """Infer field type from a numeric value.
+
+    Returns:
+        Tuple of (field_type, confidence)
+    """
+    if value == 0:
+        return "zero", 0.5
+    if 0 < value <= PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
+        return "percentage", 0.9  # High confidence - typical participation format
+    if PERCENTAGE_WHOLE_NUMBER_THRESHOLD < value <= PERCENTAGE_MAX_WHOLE_NUMBER:
+        # Could be percentage as whole number, or small dollar amount
+        return "percentage_or_number", 0.6
+    if value > MILLION:
+        return "large_number", 0.8  # Likely limit or TIV
+    if value > THOUSAND:
+        return "currency", 0.7  # Likely premium
+    return "number", 0.5
+
+
+def _infer_dollar_string_type(val: str, val_lower: str) -> tuple[str, float] | None:
+    """Infer field type from a dollar-prefixed string.
+
+    Returns:
+        Tuple of (field_type, confidence) if matched, None otherwise
+    """
+    if not val.startswith("$"):
+        return None
+
+    # Check for complex expressions first
+    if any(x in val_lower for x in ["xs", "x/s", "p/o", "excess"]):
+        return "layer_description", 0.95
+    # Simple dollar amount with magnitude suffix
+    if any(c in val.upper() for c in ["M", "K", "B"]) and val.count("$") == 1:
+        return "limit", 0.9
+    # Plain dollar amount
+    rest = val[1:].replace(",", "").replace(".", "")
+    if rest.isdigit():
+        return "currency_string", 0.8
+
+    return None
+
+
+def _infer_carrier_type(val: str, val_lower: str) -> tuple[str, float] | None:
+    """Infer if value looks like a carrier name.
+
+    Returns:
+        Tuple of (field_type, confidence) if matched, None otherwise
+    """
+    # Company name heuristics for unknown carriers
+    # - Reasonable length
+    # - Not starting with $ or digit
+    # - Contains letters
+    # - May contain common suffixes
+    if not (
+        MIN_CARRIER_NAME_LENGTH <= len(val) <= MAX_CARRIER_NAME_LENGTH
+        and not val[0].isdigit()
+        and not val.startswith("$")
+        and any(c.isalpha() for c in val)
+    ):
+        return None
+
+    # Higher confidence if has company suffix
+    if any(s in val_lower for s in COMPANY_SUFFIXES):
+        return "carrier", 0.85
+    # Medium confidence for other text that looks like a name
+    if len(val) >= MIN_CARRIER_NAME_LENGTH and val[0].isupper():
+        return "carrier", 0.6
+
+    return None
+
+
 def _infer_type(value) -> tuple[str, float]:
     """Infer field type and confidence from content alone."""
     if value is None:
@@ -495,18 +567,7 @@ def _infer_type(value) -> tuple[str, float]:
 
     # Numeric analysis
     if isinstance(value, int | float):
-        if value == 0:
-            return "zero", 0.5
-        if 0 < value <= PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
-            return "percentage", 0.9  # High confidence - typical participation format
-        if PERCENTAGE_WHOLE_NUMBER_THRESHOLD < value <= PERCENTAGE_MAX_WHOLE_NUMBER:
-            # Could be percentage as whole number, or small dollar amount
-            return "percentage_or_number", 0.6
-        if value > MILLION:
-            return "large_number", 0.8  # Likely limit or TIV
-        if value > THOUSAND:
-            return "currency", 0.7  # Likely premium
-        return "number", 0.5
+        return _infer_numeric_type(value)
 
     if not isinstance(value, str):
         return "unknown", 0.0
@@ -518,17 +579,9 @@ def _infer_type(value) -> tuple[str, float]:
     val_lower = val.lower()
 
     # Dollar amounts with M/K/B suffix (layer limits)
-    if val.startswith("$"):
-        # Check for complex expressions first
-        if any(x in val_lower for x in ["xs", "x/s", "p/o", "excess"]):
-            return "layer_description", 0.95
-        # Simple dollar amount with magnitude suffix
-        if any(c in val.upper() for c in ["M", "K", "B"]) and val.count("$") == 1:
-            return "limit", 0.9
-        # Plain dollar amount
-        rest = val[1:].replace(",", "").replace(".", "")
-        if rest.isdigit():
-            return "currency_string", 0.8
+    dollar_result = _infer_dollar_string_type(val, val_lower)
+    if dollar_result:
+        return dollar_result
 
     # Percentage string
     if val.endswith("%"):
@@ -551,7 +604,6 @@ def _infer_type(value) -> tuple[str, float]:
         return "label", 0.7
 
     # Policy number patterns - alphanumeric codes with specific formats
-    # e.g., "RMANAH02273P03", "CSP00316270P-00", "PG2507405", "61385843"
     if _looks_like_policy_number(val):
         return "policy_number", 0.85
 
@@ -560,7 +612,6 @@ def _infer_type(value) -> tuple[str, float]:
         return "label", 0.7
 
     # Very short strings (1-3 chars) are unlikely to be carrier names
-    # Unless they are known acronyms
     if len(val) <= 3 and not _is_known_carrier(val):
         return "label", 0.6
 
@@ -568,23 +619,10 @@ def _infer_type(value) -> tuple[str, float]:
     if _is_known_carrier(val):
         return "carrier", 0.9
 
-    # Company name heuristics for unknown carriers
-    # - Reasonable length
-    # - Not starting with $ or digit
-    # - Contains letters
-    # - May contain common suffixes
-    if (
-        MIN_CARRIER_NAME_LENGTH <= len(val) <= MAX_CARRIER_NAME_LENGTH
-        and not val[0].isdigit()
-        and not val.startswith("$")
-        and any(c.isalpha() for c in val)
-    ):
-        # Higher confidence if has company suffix
-        if any(s in val_lower for s in COMPANY_SUFFIXES):
-            return "carrier", 0.85
-        # Medium confidence for other text that looks like a name
-        if len(val) >= MIN_CARRIER_NAME_LENGTH and val[0].isupper():
-            return "carrier", 0.6
+    # Check carrier name heuristics
+    carrier_result = _infer_carrier_type(val, val_lower)
+    if carrier_result:
+        return carrier_result
 
     return "text", 0.3
 
