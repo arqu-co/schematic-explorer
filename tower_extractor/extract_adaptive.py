@@ -93,7 +93,8 @@ def _is_non_carrier(value: str) -> bool:
     if any(phrase in val_lower for phrase in [
         'subject to', 'conditions', 'terms &', 'all terms',
         'tied to', 'offer capacity', 'no rp for', 'loss rating',
-        'increase in', 'decrease in', 'updated', 'by year'
+        'increase in', 'decrease in', 'updated', 'by year',
+        'buy down', 'all risk', 'dic premium', 'aggregate',
     ]):
         return True
 
@@ -229,6 +230,10 @@ def _detect_summary_columns(ws) -> dict:
         'aggregate',
     ]
 
+    # Also detect year-prefixed layer premium columns (e.g., "2019 Layer Premium")
+    # These are summary columns showing premium totals by year, not per-carrier data
+    year_layer_premium_pattern = re.compile(r'^\d{4}\s+layer\s+premium', re.IGNORECASE)
+
     # Scan header rows (typically rows 1-10) for summary column indicators
     for row in range(1, 11):
         for col in range(1, min(ws.max_column + 1, 30)):
@@ -237,6 +242,24 @@ def _detect_summary_columns(ws) -> dict:
             if val and isinstance(val, str):
                 # Normalize whitespace for pattern matching
                 val_lower = ' '.join(val.lower().split())
+
+                # Check for year-prefixed layer premium (e.g., "2019 Layer Premium")
+                if year_layer_premium_pattern.match(val_lower):
+                    result['columns'].add(col)
+                    # Also mark consecutive columns to the right as summary (Fees, Taxes, Total)
+                    # These typically follow the year layer premium column
+                    for extra_col in range(col + 1, min(col + 5, ws.max_column + 1)):
+                        extra_val = ws.cell(row=row, column=extra_col).value
+                        if extra_val and isinstance(extra_val, str):
+                            extra_lower = extra_val.lower().strip()
+                            if extra_lower in ('fees', 'total') or 'tax' in extra_lower:
+                                result['columns'].add(extra_col)
+                            # Also catch year layer rate (e.g., "2019 Layer Rate")
+                            if re.match(r'^\d{4}\s+layer\s+rate', extra_lower):
+                                result['columns'].add(extra_col)
+                                result['layer_rate_col'] = extra_col
+                    continue
+
                 for pattern in summary_patterns:
                     if pattern in val_lower:
                         result['columns'].add(col)
