@@ -54,6 +54,7 @@ class VerificationResult:
     issues: list[str]
     suggestions: list[str]
     raw_response: str
+    metadata: dict | None = None  # Additional info (e.g., fallback_used, parsing_method)
 
 
 def parse_limit_value(val) -> str | None:

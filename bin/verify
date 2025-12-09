@@ -10,11 +10,19 @@ Usage:
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+# Configure logging for CLI output - show warnings and above
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(levelname)s: %(message)s",
+    stream=sys.stderr,
+)
 
 from schematic_explorer import verify_file
 
@@ -43,7 +51,7 @@ def load_state() -> list[Path]:
         return []
 
 
-def print_result(filepath: Path, result):
+def print_result(filepath: Path, result, verbose: bool = False):
     """Print verification result."""
     print(f"\n{'='*60}")
     print(f"File: {filepath.name}")
@@ -61,6 +69,17 @@ def print_result(filepath: Path, result):
 
     print(f"Score: {score:.0%} {indicator}")
     print(f"Summary: {result.summary}")
+
+    # Show metadata (parsing method, fallback usage)
+    if result.metadata:
+        method = result.metadata.get("parsing_method", "unknown")
+        fallback = result.metadata.get("fallback_used", False)
+        if fallback:
+            print(f"  ⚠ Fallback parser used (structured output failed)")
+        if verbose:
+            print(f"  Parsing method: {method}")
+            if "structured_error" in result.metadata:
+                print(f"  Structured error: {result.metadata['structured_error']}")
 
     if result.issues:
         print("\nIssues:")
@@ -89,6 +108,14 @@ def save_insights_txt(filepath: Path, result):
         "",
     ]
 
+    # Include metadata about parsing method
+    if result.metadata:
+        lines.append("METADATA:")
+        lines.append("-" * 40)
+        for key, value in result.metadata.items():
+            lines.append(f"  {key}: {value}")
+        lines.append("")
+
     if result.issues:
         lines.append("ISSUES FOUND:")
         lines.append("-" * 40)
@@ -110,11 +137,15 @@ def save_insights_txt(filepath: Path, result):
     return txt_path
 
 
+# Global flag for verbose output
+VERBOSE = False
+
+
 def verify_single(filepath: Path) -> float:
     """Verify a single file, save insights, and return score."""
     sheet = SHEET_MAP.get(filepath.name)
     result = verify_file(str(filepath), sheet)
-    score = print_result(filepath, result)
+    score = print_result(filepath, result, verbose=VERBOSE)
 
     # Save insights to txt file
     txt_path = save_insights_txt(filepath, result)
@@ -191,6 +222,8 @@ def cmd_file(filepath: str):
 
 
 def main():
+    global VERBOSE
+
     parser = argparse.ArgumentParser(description="Verify extraction accuracy")
     parser.add_argument(
         "target",
@@ -198,7 +231,17 @@ def main():
         default="last",
         help="File to verify, or 'all'/'last'"
     )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Show detailed output including parsing metadata"
+    )
     args = parser.parse_args()
+
+    VERBOSE = args.verbose
+    if VERBOSE:
+        # Also enable INFO level logging when verbose
+        logging.getLogger("schematic_explorer").setLevel(logging.INFO)
 
     target = args.target.lower() if args.target else "last"
 

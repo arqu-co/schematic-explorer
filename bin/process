@@ -60,13 +60,25 @@ def process_file(filepath: Path) -> bool:
             print("  SKIPPED: No carrier data found")
             return False
 
-        # Run verification if enabled
+        # Run verification if enabled and capture result
+        verification_data = None
         if VERIFY_ENABLED:
-            run_verification(filepath, sheet)
+            verification_data = run_verification(filepath, sheet)
+
+        # Build output structure
+        # When verification is enabled, wrap in object with metadata
+        # Otherwise, just output the entries array for backward compatibility
+        if verification_data:
+            output = {
+                "entries": entries,
+                "verification": verification_data,
+            }
+        else:
+            output = entries
 
         # Write JSON output
         json_path = OUTPUT_DIR / f"{stem}.json"
-        json_path.write_text(json.dumps(entries, indent=2))
+        json_path.write_text(json.dumps(output, indent=2))
         print(f"  JSON: {json_path.name}")
 
         print(f"  Extracted {len(entries)} carrier entries")
@@ -79,8 +91,12 @@ def process_file(filepath: Path) -> bool:
         return False
 
 
-def run_verification(filepath: Path, sheet: str = None):
-    """Run AI verification on extracted data."""
+def run_verification(filepath: Path, sheet: str = None) -> dict | None:
+    """Run AI verification on extracted data.
+
+    Returns:
+        dict with verification metadata or None if verification fails
+    """
     try:
         result = verify_file(str(filepath), sheet)
         score = result.score
@@ -96,12 +112,27 @@ def run_verification(filepath: Path, sheet: str = None):
             indicator = "✗ POOR"
 
         print(f"  VERIFY: {score:.0%} {indicator}")
+
+        # Show fallback warning if used
+        if result.metadata and result.metadata.get("fallback_used"):
+            print(f"    ⚠ Fallback parser used (structured output failed)")
+
         if result.issues:
             for issue in result.issues[:2]:
                 print(f"    - {issue}")
 
+        # Return verification data for inclusion in JSON
+        return {
+            "score": score,
+            "summary": result.summary,
+            "issues": result.issues,
+            "suggestions": result.suggestions,
+            "metadata": result.metadata,
+        }
+
     except Exception as e:
         print(f"  VERIFY ERROR: {e}")
+        return None
 
 
 def save_state(files: list[Path]):

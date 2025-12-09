@@ -1,6 +1,7 @@
 """AI-powered verification of extracted tower data using Gemini."""
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -10,6 +11,11 @@ from dotenv import load_dotenv
 from PIL import Image
 
 from .types import CarrierEntry, LayerSummary, VerificationResult
+
+# Library logging follows best practice: NullHandler by default
+# CLI tools/users can configure logging to see output
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 # Output directory for snapshots
 OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
@@ -468,15 +474,21 @@ def verify_extraction(
         # Parse structured response
         data = json.loads(raw_response)
 
+        logger.info("verify_extraction: structured output parsed successfully")
         return VerificationResult(
             score=float(data.get("score", 0)),
             summary=data.get("summary", "No summary"),
             issues=data.get("issues", []),
             suggestions=data.get("suggestions", []),
-            raw_response=raw_response
+            raw_response=raw_response,
+            metadata={"parsing_method": "structured", "fallback_used": False}
         )
     except Exception as e:
         # Fallback to legacy parsing if structured output fails
+        logger.warning(
+            "verify_extraction: structured output failed (%s), using fallback parser",
+            str(e)
+        )
         try:
             if snapshot_path:
                 prompt = VERIFICATION_PROMPT.format(
@@ -495,20 +507,27 @@ def verify_extraction(
             raw_response = response.text
             data = _parse_json_response(raw_response)
 
+            logger.info("verify_extraction: fallback parser succeeded")
             return VerificationResult(
                 score=float(data.get("score", 0)),
                 summary=data.get("summary", "No summary provided"),
                 issues=data.get("issues", []),
                 suggestions=data.get("suggestions", []),
-                raw_response=raw_response
+                raw_response=raw_response,
+                metadata={"parsing_method": "fallback", "fallback_used": True, "structured_error": str(e)}
             )
         except Exception as fallback_error:
+            logger.error(
+                "verify_extraction: fallback parser also failed (%s)",
+                str(fallback_error)
+            )
             return VerificationResult(
                 score=0.0,
                 summary=f"Verification failed: {e}",
                 issues=[str(e)],
                 suggestions=[],
-                raw_response=str(e)
+                raw_response=str(e),
+                metadata={"parsing_method": "error", "fallback_used": True, "structured_error": str(e), "fallback_error": str(fallback_error)}
             )
 
 
@@ -560,15 +579,21 @@ def verify_snapshot(
         issues.extend([f"Missing: {m}" for m in data.get("missing_from_extraction", [])])
         issues.extend([f"False positive: {f}" for f in data.get("false_positives", [])])
 
+        logger.info("verify_snapshot: structured output parsed successfully")
         return VerificationResult(
             score=float(data.get("score", 0)),
             summary=data.get("summary", "Visual verification complete"),
             issues=issues,
             suggestions=[],
-            raw_response=raw_response
+            raw_response=raw_response,
+            metadata={"parsing_method": "structured", "fallback_used": False}
         )
     except Exception as e:
         # Fallback to legacy parsing
+        logger.warning(
+            "verify_snapshot: structured output failed (%s), using fallback parser",
+            str(e)
+        )
         try:
             image = Image.open(snapshot_path)
             response = model.generate_content([prompt, image])
@@ -579,20 +604,27 @@ def verify_snapshot(
             issues.extend([f"Missing: {m}" for m in data.get("missing_from_extraction", [])])
             issues.extend([f"False positive: {f}" for f in data.get("false_positives", [])])
 
+            logger.info("verify_snapshot: fallback parser succeeded")
             return VerificationResult(
                 score=float(data.get("score", 0)),
                 summary=data.get("summary", "Visual verification complete"),
                 issues=issues,
                 suggestions=[],
-                raw_response=raw_response
+                raw_response=raw_response,
+                metadata={"parsing_method": "fallback", "fallback_used": True, "structured_error": str(e)}
             )
         except Exception as fallback_error:
+            logger.error(
+                "verify_snapshot: fallback parser also failed (%s)",
+                str(fallback_error)
+            )
             return VerificationResult(
                 score=0.0,
                 summary=f"Snapshot verification failed: {e}",
                 issues=[str(e)],
                 suggestions=[],
-                raw_response=str(e)
+                raw_response=str(e),
+                metadata={"parsing_method": "error", "fallback_used": True, "structured_error": str(e), "fallback_error": str(fallback_error)}
             )
 
 
