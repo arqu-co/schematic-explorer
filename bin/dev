@@ -3,15 +3,23 @@
 # Start the Schematic Explorer development server.
 #
 # Usage:
-#     bin/dev              # Start server on default port (5173)
+#     bin/dev              # Start server on port 5173
 #     bin/dev --no-open    # Start without opening browser
 #
 
 set -e
 
+PORT=5173
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VIEWER_DIR="$PROJECT_ROOT/viewer"
 OUTPUT_DIR="$PROJECT_ROOT/output"
+
+# Kill anything running on the port
+if lsof -ti:$PORT >/dev/null 2>&1; then
+    echo "Killing existing process on port $PORT..."
+    lsof -ti:$PORT | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
 
 # Check if output directory exists with JSON files
 if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A "$OUTPUT_DIR"/*.json 2>/dev/null)" ]; then
@@ -30,8 +38,8 @@ echo ""
 echo "📊 Schematic Explorer"
 echo "========================================"
 echo ""
-echo "Starting development server..."
+echo "Starting development server on http://localhost:$PORT"
 echo ""
 
 cd "$VIEWER_DIR"
-npm run dev -- --open
+npm run dev -- --port $PORT --strictPort --open
