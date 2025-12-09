@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""
+Generate PNG snapshots from Excel files for visual verification.
+
+Usage:
+    bin/snapshot <file>           # Snapshot a specific file
+    bin/snapshot all              # Snapshot all files in input/
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+import openpyxl
+from openpyxl.utils import get_column_letter
+from PIL import Image, ImageDraw, ImageFont
+
+INPUT_DIR = PROJECT_ROOT / "input"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+
+SHEET_MAP = {
+    "Sample Tower SM.xlsx": "BOUND Property Tower",
+    "Hard Schematic.xlsx": "BOUND Property Tower",
+    "Super Hard Schematic.xlsx": "Bound 19-20",
+    "Medium B Schematic.xlsx": "Working 19-20",
+}
+
+# Cell dimensions - more Excel-like proportions
+DEFAULT_CELL_WIDTH = 90
+CELL_HEIGHT = 20
+HEADER_HEIGHT = 22
+ROW_NUM_WIDTH = 35
+FONT_SIZE = 10
+HEADER_FONT_SIZE = 9
+MAX_ROWS = 70
+MAX_COLS = 20
+
+
+def get_font(size=FONT_SIZE, bold=False):
+    """Get a suitable font for rendering."""
+    # Try common system fonts - prefer sans-serif for Excel-like look
+    font_paths = [
+        "/System/Library/Fonts/Helvetica.ttc",  # macOS
+        "/System/Library/Fonts/SFNSText.ttf",  # macOS
+        "/System/Library/Fonts/SFNS.ttf",  # macOS
+        "/Library/Fonts/Arial.ttf",  # macOS
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",  # Linux
+        "C:\\Windows\\Fonts\\arial.ttf",  # Windows
+        "C:\\Windows\\Fonts\\calibri.ttf",  # Windows
+    ]
+
+    for path in font_paths:
+        if Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except:
+                continue
+
+    # Fallback to default
+    return ImageFont.load_default()
+
+
+def rgb_from_hex(hex_color):
+    """Convert hex color to RGB tuple."""
+    if not hex_color:
+        return None
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 6:
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    elif len(hex_color) == 8:  # ARGB format
+        return tuple(int(hex_color[i:i+2], 16) for i in (2, 4, 6))
+    return None
+
+
+def get_cell_fill_color(cell):
+    """Extract fill color from cell."""
+    try:
+        fill = cell.fill
+        if not fill or fill.fill_type is None or fill.fill_type == 'none':
+            return None
+
+        # Try to get the foreground color
+        fg = fill.fgColor
+        if fg:
+            # Direct RGB value
+            if fg.type == 'rgb' and fg.rgb:
+                rgb = fg.rgb
+                if isinstance(rgb, str) and rgb != '00000000':
+                    color = rgb_from_hex(rgb)
+                    if color and not all(c > 250 for c in color):
+                        return color
+
+            # Theme color - use a mapping of common Excel theme colors
+            elif fg.type == 'theme':
+                theme_colors = {
+                    0: (255, 255, 255),   # Background 1
+                    1: (0, 0, 0),          # Text 1
+                    2: (238, 236, 225),    # Background 2
+                    3: (31, 73, 125),      # Text 2
+                    4: (79, 129, 189),     # Accent 1
+                    5: (192, 80, 77),      # Accent 2
+                    6: (155, 187, 89),     # Accent 3
+                    7: (128, 100, 162),    # Accent 4
+                    8: (75, 172, 198),     # Accent 5
+                    9: (247, 150, 70),     # Accent 6
+                }
+                theme_idx = fg.theme
+                if theme_idx in theme_colors:
+                    # Apply tint if present
+                    base_color = theme_colors[theme_idx]
+                    tint = fg.tint if fg.tint else 0
+                    if tint > 0:
+                        # Lighten
+                        color = tuple(int(c + (255 - c) * tint) for c in base_color)
+                    elif tint < 0:
+                        # Darken
+                        color = tuple(int(c * (1 + tint)) for c in base_color)
+                    else:
+                        color = base_color
+
+                    if not all(c > 250 for c in color):
+                        return color
+
+            # Indexed color
+            elif fg.type == 'indexed' and fg.indexed is not None:
+                # Common indexed colors
+                indexed_colors = {
+                    0: (0, 0, 0),        # Black
+                    1: (255, 255, 255),  # White
+                    2: (255, 0, 0),      # Red
+                    3: (0, 255, 0),      # Green
+                    4: (0, 0, 255),      # Blue
+                    5: (255, 255, 0),    # Yellow
+                    6: (255, 0, 255),    # Magenta
+                    7: (0, 255, 255),    # Cyan
+                    22: (192, 192, 192), # Silver/Gray
+                    26: (255, 255, 204), # Light Yellow
+                    27: (204, 255, 255), # Light Cyan
+                    43: (255, 255, 153), # Light Yellow 2
+                    44: (153, 204, 255), # Light Blue
+                    45: (255, 153, 204), # Light Pink
+                    46: (204, 153, 255), # Light Purple
+                    47: (255, 204, 153), # Light Orange
+                }
+                if fg.indexed in indexed_colors:
+                    return indexed_colors[fg.indexed]
+
+    except Exception as e:
+        pass
+    return None
+
+
+def get_column_widths(ws, max_col):
+    """Calculate column widths based on content."""
+    widths = {}
+    for col in range(1, max_col + 1):
+        max_width = DEFAULT_CELL_WIDTH
+        # Check actual Excel column width if set
+        col_letter = get_column_letter(col)
+        if col_letter in ws.column_dimensions:
+            excel_width = ws.column_dimensions[col_letter].width
+            if excel_width:
+                # Convert Excel width units to pixels (roughly 7 pixels per unit)
+                max_width = max(int(excel_width * 7), 50)
+
+        # Also check content width
+        for row in range(1, min(ws.max_row + 1, 30)):
+            val = ws.cell(row, col).value
+            if val:
+                text_len = len(str(val))
+                content_width = min(text_len * 7 + 10, 250)
+                max_width = max(max_width, content_width)
+
+        widths[col] = min(max_width, 200)  # Cap at 200px
+    return widths
+
+
+def truncate_text(text, max_chars=20):
+    """Truncate text to fit in cell."""
+    if not text:
+        return ""
+    text = str(text).strip().replace('\n', ' ')
+    if len(text) > max_chars:
+        return text[:max_chars-1] + "…"
+    return text
+
+
+def format_value(value, cell_width):
+    """Format a cell value for display."""
+    max_chars = max(int(cell_width / 7), 8)
+
+    if value is None:
+        return ""
+
+    # Format numbers
+    if isinstance(value, float):
+        if 0 < value < 1:
+            return f"{value:.0%}"
+        elif value > 1000000:
+            return f"${value/1000000:.0f}M"
+        elif value > 1000:
+            return f"${value:,.0f}"
+        else:
+            return f"{value:.2f}"
+    elif isinstance(value, int):
+        if value > 1000000:
+            return f"${value/1000000:.0f}M"
+        elif value > 1000:
+            return f"${value:,}"
+
+    return truncate_text(str(value), max_chars)
+
+
+def render_excel_to_image(filepath: Path, sheet_name: str = None) -> Path:
+    """Render Excel sheet to PNG image."""
+    wb = openpyxl.load_workbook(filepath, data_only=True)
+
+    if sheet_name:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
+
+    # Determine dimensions
+    max_row = min(ws.max_row, MAX_ROWS)
+    max_col = min(ws.max_column, MAX_COLS)
+
+    # Get column widths
+    col_widths = get_column_widths(ws, max_col)
+
+    # Calculate image size
+    total_width = ROW_NUM_WIDTH + sum(col_widths.values()) + 10
+    img_height = HEADER_HEIGHT + (max_row * CELL_HEIGHT) + 25
+
+    # Create image with white background
+    img = Image.new('RGB', (total_width, img_height), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    font = get_font(FONT_SIZE)
+    header_font = get_font(HEADER_FONT_SIZE)
+
+    # Excel-like colors
+    GRID_COLOR = (217, 217, 217)
+    HEADER_BG = (242, 242, 242)
+    HEADER_BORDER = (180, 180, 180)
+    TEXT_COLOR = (0, 0, 0)
+    HEADER_TEXT = (51, 51, 51)
+
+    # Calculate column positions
+    col_positions = {1: ROW_NUM_WIDTH}
+    for col in range(2, max_col + 2):
+        col_positions[col] = col_positions[col-1] + col_widths.get(col-1, DEFAULT_CELL_WIDTH)
+
+    # Draw column headers (A, B, C, ...)
+    for col in range(1, max_col + 1):
+        x = col_positions[col]
+        w = col_widths[col]
+        draw.rectangle([x, 0, x + w, HEADER_HEIGHT], fill=HEADER_BG, outline=HEADER_BORDER)
+        letter = get_column_letter(col)
+        bbox = draw.textbbox((0, 0), letter, font=header_font)
+        text_width = bbox[2] - bbox[0]
+        draw.text((x + (w - text_width) // 2, 5), letter, fill=HEADER_TEXT, font=header_font)
+
+    # Draw row numbers
+    for row in range(1, max_row + 1):
+        y = HEADER_HEIGHT + (row - 1) * CELL_HEIGHT
+        draw.rectangle([0, y, ROW_NUM_WIDTH, y + CELL_HEIGHT], fill=HEADER_BG, outline=HEADER_BORDER)
+        row_str = str(row)
+        bbox = draw.textbbox((0, 0), row_str, font=header_font)
+        text_width = bbox[2] - bbox[0]
+        draw.text((ROW_NUM_WIDTH - text_width - 4, y + 3), row_str, fill=HEADER_TEXT, font=header_font)
+
+    # Track merged cells
+    merged_ranges = {}
+    for merged in ws.merged_cells.ranges:
+        min_col_m, min_row, max_col_m, max_row_m = merged.bounds
+        for r in range(min_row, max_row_m + 1):
+            for c in range(min_col_m, max_col_m + 1):
+                if r == min_row and c == min_col_m:
+                    merged_ranges[(r, c)] = (max_row_m - min_row + 1, max_col_m - min_col_m + 1)
+                else:
+                    merged_ranges[(r, c)] = None
+
+    # Draw cells
+    for row in range(1, max_row + 1):
+        for col in range(1, max_col + 1):
+            x = col_positions[col]
+            y = HEADER_HEIGHT + (row - 1) * CELL_HEIGHT
+            w = col_widths[col]
+
+            # Check if this is part of a merged range
+            if (row, col) in merged_ranges:
+                merge_info = merged_ranges[(row, col)]
+                if merge_info is None:
+                    continue
+                row_span, col_span = merge_info
+                # Calculate merged cell width
+                cell_w = sum(col_widths.get(col + i, DEFAULT_CELL_WIDTH) for i in range(col_span))
+                cell_h = row_span * CELL_HEIGHT
+            else:
+                cell_w = w
+                cell_h = CELL_HEIGHT
+
+            cell = ws.cell(row, col)
+
+            # Get fill color
+            fill_color = get_cell_fill_color(cell)
+            if fill_color:
+                draw.rectangle([x, y, x + cell_w, y + cell_h], fill=fill_color, outline=GRID_COLOR)
+            else:
+                draw.rectangle([x, y, x + cell_w, y + cell_h], outline=GRID_COLOR)
+
+            # Draw cell value
+            value = cell.value
+            if value is not None:
+                text = format_value(value, cell_w)
+                draw.text((x + 3, y + 3), text, fill=TEXT_COLOR, font=font)
+
+    # Draw title bar at bottom
+    title = f"{filepath.name} — {ws.title}"
+    draw.rectangle([0, img_height - 20, total_width, img_height], fill=(245, 245, 245))
+    draw.text((5, img_height - 17), title, fill=(100, 100, 100), font=header_font)
+
+    # Save image
+    output_path = OUTPUT_DIR / f"{filepath.stem}.png"
+    img.save(output_path, "PNG", optimize=True)
+
+    return output_path
+
+
+def snapshot_file(filepath: str) -> int:
+    """Create snapshot of a specific file."""
+    path = Path(filepath)
+    if not path.exists():
+        path = INPUT_DIR / filepath
+    if not path.exists():
+        print(f"File not found: {filepath}")
+        return 1
+
+    sheet = SHEET_MAP.get(path.name)
+    output = render_excel_to_image(path, sheet)
+    print(f"Created: {output.name}")
+    return 0
+
+
+def snapshot_all() -> int:
+    """Create snapshots of all Excel files."""
+    files = list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+    if not files:
+        print("No Excel files found in input/")
+        return 1
+
+    print(f"Creating snapshots for {len(files)} file(s)...\n")
+
+    for f in files:
+        sheet = SHEET_MAP.get(f.name)
+        try:
+            output = render_excel_to_image(f, sheet)
+            print(f"  {f.name} -> {output.name}")
+        except Exception as e:
+            print(f"  {f.name} -> ERROR: {e}")
+
+    print(f"\nDone! Snapshots saved to {OUTPUT_DIR}")
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Generate PNG snapshots from Excel files")
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default="all",
+        help="File to snapshot, or 'all'"
+    )
+    args = parser.parse_args()
+
+    target = args.target.lower() if args.target else "all"
+
+    if target == "all":
+        return snapshot_all()
+    else:
+        return snapshot_file(args.target)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

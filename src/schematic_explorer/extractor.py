@@ -954,6 +954,167 @@ def _classify_row_label(val_lower: str, row: int, labels: dict):
             labels["policy_row"] = row
 
 
+# =============================================================================
+# Proximity Matching Helpers
+# =============================================================================
+
+
+def _get_column_range(block: Block) -> range:
+    """Get the range of columns spanned by a block."""
+    return range(block.col, block.col + block.cols)
+
+
+def _columns_overlap(range1: range, range2: range) -> bool:
+    """Check if two column ranges overlap."""
+    return any(c in range2 for c in range1) or any(c in range1 for c in range2)
+
+
+def _calculate_block_proximity(block: Block, carrier: Block, carrier_col_range: range) -> tuple:
+    """Calculate proximity score for sorting blocks by relevance to carrier.
+
+    Returns:
+        Tuple of (not_column_aligned, row_distance) for sorting.
+        Lower values = higher priority.
+    """
+    block_col_range = _get_column_range(block)
+    col_overlap = _columns_overlap(block_col_range, carrier_col_range)
+    row_dist = abs(block.row - carrier.row)
+    return (not col_overlap, row_dist)
+
+
+def _is_block_relevant(
+    block: Block, carrier: Block, carrier_col_range: range, row_range: range
+) -> bool:
+    """Check if a data block is relevant to a carrier based on spatial proximity.
+
+    A block is relevant if:
+    - It's in the carrier's column range, OR
+    - It's in the same row (±1) and within MAX_COLUMN_DISTANCE columns
+    """
+    block_col_range = _get_column_range(block)
+    in_col = _columns_overlap(block_col_range, carrier_col_range)
+
+    if in_col:
+        return True
+
+    # For non-column-aligned blocks, require same row and close proximity
+    if abs(block.row - carrier.row) <= 1 and abs(block.col - carrier.col) <= MAX_COLUMN_DISTANCE:
+        return True
+
+    return False
+
+
+def _match_participation_block(
+    block: Block, row_labels: dict | None, rate_col: int | None
+) -> float | None:
+    """Try to match a percentage block as participation.
+
+    Returns:
+        Normalized participation percentage (0-1) or None if not a match.
+    """
+    # Skip Rate column - rates are NOT participation percentages
+    if rate_col and block.col == rate_col:
+        return None
+
+    participation_row = row_labels.get("participation_row") if row_labels else None
+
+    if participation_row:
+        # Only accept values from participation row (or row below)
+        if block.row == participation_row or block.row == participation_row + 1:
+            return _normalize_percentage(block.value)
+        return None
+    else:
+        # No participation_row label - use proximity-based matching
+        return _normalize_percentage(block.value)
+
+
+def _match_currency_block(
+    block: Block,
+    column_headers: dict | None,
+    row_labels: dict | None,
+    current_premium: float | None,
+    current_premium_share: float | None,
+) -> tuple[float | None, float | None]:
+    """Try to match a currency block as premium or premium_share.
+
+    Returns:
+        Tuple of (premium, premium_share) with updated values.
+    """
+    # Extract column headers
+    tiv_col = column_headers.get("tiv_col") if column_headers else None
+    tiv_data_col = column_headers.get("tiv_data_col") if column_headers else None
+    limit_col = column_headers.get("limit_col") if column_headers else None
+    premium_col = column_headers.get("premium_col") if column_headers else None
+    premium_share_col = column_headers.get("premium_share_col") if column_headers else None
+
+    # Extract row labels
+    policy_row = row_labels.get("policy_row") if row_labels else None
+    percent_premium_row = row_labels.get("percent_premium_row") if row_labels else None
+    premium_row = row_labels.get("premium_row") if row_labels else None
+    limit_row = row_labels.get("limit_row") if row_labels else None
+
+    # Skip TIV columns
+    if tiv_col and block.col == tiv_col:
+        return current_premium, current_premium_share
+    if tiv_data_col and block.col == tiv_data_col:
+        return current_premium, current_premium_share
+
+    val = _parse_currency(block.value)
+    if val is None:
+        return current_premium, current_premium_share
+
+    # Skip policy number row
+    if policy_row and block.row == policy_row:
+        return current_premium, current_premium_share
+
+    # Skip Limit column
+    if limit_col and block.col == limit_col:
+        return current_premium, current_premium_share
+
+    # Check for % Premium / Share Premium row (carrier's share)
+    if percent_premium_row:
+        if block.row == percent_premium_row or block.row == percent_premium_row + 1:
+            if current_premium is None:
+                return val, current_premium_share
+            return current_premium, current_premium_share
+
+    # Check for Premium row (layer total)
+    if premium_row:
+        if block.row == premium_row or block.row == premium_row + 1:
+            if percent_premium_row:
+                # Skip layer totals when we have % Premium row
+                return current_premium, current_premium_share
+            elif current_premium is None:
+                return val, current_premium_share
+            return current_premium, current_premium_share
+
+    # Check for LIMIT row
+    if limit_row and block.row == limit_row:
+        if current_premium is None:
+            return val, current_premium_share
+        return current_premium, current_premium_share
+
+    # Check for premium_col column header
+    if premium_col and block.col == premium_col:
+        if current_premium is None:
+            return val, current_premium_share
+        return current_premium, current_premium_share
+    elif premium_col:
+        # We have a premium_col but this block isn't in it - skip
+        return current_premium, current_premium_share
+
+    # Fallback to column-based logic
+    if premium_share_col and block.col == premium_share_col:
+        if current_premium_share is None:
+            return current_premium, val
+    elif current_premium is None:
+        return val, current_premium_share
+    elif current_premium_share is None:
+        return current_premium, val
+
+    return current_premium, current_premium_share
+
+
 def _build_entry_from_proximity(
     ws,
     carrier: Block,
@@ -966,166 +1127,67 @@ def _build_entry_from_proximity(
     """Build a CarrierEntry by finding spatially related data blocks.
 
     Args:
-        original_cell: The actual Excel cell reference (for multi-line carriers,
-                      this preserves the original cell rather than artificial row offset)
+        ws: The worksheet
+        carrier: The carrier block to build an entry for
+        data_blocks: List of data blocks to search for related data
+        layer: Layer dict with limit, start_row, end_row
+        column_headers: Dict of column header positions
+        row_labels: Dict of row label positions
+        original_cell: The actual Excel cell reference (for multi-line carriers)
+
+    Returns:
+        CarrierEntry with extracted data
     """
-
-    # Find data in same column or within carrier's column span
-    col_range = range(carrier.col, carrier.col + carrier.cols)
-
-    # Also check rows below the carrier (common pattern)
+    # Define search ranges
+    carrier_col_range = _get_column_range(carrier)
     row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer["end_row"] + 1))
 
+    # Initialize extracted values
     participation = None
     premium = None
     premium_share = None
     terms = None
     layer_desc = None
 
-    # Get column header info if available
-    premium_col = column_headers.get("premium_col") if column_headers else None
-    limit_col = column_headers.get("limit_col") if column_headers else None
-    premium_share_col = column_headers.get("premium_share_col") if column_headers else None
-    rate_col = column_headers.get("rate_col") if column_headers else None  # Rate != participation
-    tiv_col = column_headers.get("tiv_col") if column_headers else None  # TIV != premium
-    tiv_data_col = column_headers.get("tiv_data_col") if column_headers else None  # TIV data column
+    # Get rate column for filtering (Rate != participation)
+    rate_col = column_headers.get("rate_col") if column_headers else None
 
-    # Get row label info if available (to distinguish Premium from % Premium rows)
-    percent_premium_row = row_labels.get("percent_premium_row") if row_labels else None
-    premium_row = row_labels.get("premium_row") if row_labels else None
-    limit_row = row_labels.get("limit_row") if row_labels else None
-    policy_row = row_labels.get("policy_row") if row_labels else None
+    # Sort data blocks by proximity to carrier
+    sorted_blocks = sorted(
+        data_blocks,
+        key=lambda b: _calculate_block_proximity(b, carrier, carrier_col_range),
+    )
 
-    # Sort data blocks by proximity - prefer same column, then nearby rows
-    def block_priority(block):
-        # Check column alignment
-        block_cols = range(block.col, block.col + block.cols)
-        col_overlap = any(c in col_range for c in block_cols) or any(
-            c in block_cols for c in col_range
-        )
-
-        # Calculate row distance
-        row_dist = abs(block.row - carrier.row)
-
-        # Priority: column-aligned blocks first, then by row distance
-        # Return tuple: (not col_aligned, row_distance) for sorting
-        return (not col_overlap, row_dist)
-
-    sorted_blocks = sorted(data_blocks, key=block_priority)
-
+    # Process each block
     for block in sorted_blocks:
-        # Check if block is in carrier's column range
-        block_cols = range(block.col, block.col + block.cols)
-        in_col = any(c in col_range for c in block_cols) or any(c in block_cols for c in col_range)
+        # Skip blocks that aren't relevant to this carrier
+        if not _is_block_relevant(block, carrier, carrier_col_range, row_range):
+            continue
 
-        # Check if block is in nearby rows (within layer)
-        in_row = block.row in row_range
-
-        # Only match if column-aligned OR (same row and close column)
-        if not in_col:
-            # For non-column-aligned blocks, require same row and close proximity
-            if abs(block.row - carrier.row) > 1:
-                continue
-            if abs(block.col - carrier.col) > MAX_COLUMN_DISTANCE:
-                continue
-
+        # Match percentage blocks (participation)
         if block.field_type in ("percentage", "percentage_or_number") and participation is None:
-            # Skip Rate column - rates are NOT participation percentages
-            if rate_col and block.col == rate_col:
-                continue
+            matched = _match_participation_block(block, row_labels, rate_col)
+            if matched is not None:
+                participation = matched
 
-            # If we have a participation_row label, only accept values from that row (or row below)
-            participation_row = row_labels.get("participation_row") if row_labels else None
-            if participation_row:
-                if block.row == participation_row or block.row == participation_row + 1:
-                    participation = _normalize_percentage(block.value)
-                # Skip percentages not in the participation row
-                continue
-            else:
-                # No participation_row label - use proximity-based matching
-                participation = _normalize_percentage(block.value)
-
+        # Match currency blocks (premium)
         elif block.field_type in ("currency", "currency_string", "large_number", "zero"):
-            # Skip TIV column - Total Insured Value is NOT premium
-            if tiv_col and block.col == tiv_col:
-                continue
-            # Skip TIV data column (typically to the right of TIV header)
-            if tiv_data_col and block.col == tiv_data_col:
-                continue
-            val = _parse_currency(block.value)
-            # Note: val can be 0 (falsy but valid), so check for None explicitly
-            if val is not None:
-                # Skip policy number row - those aren't premiums!
-                if policy_row and block.row == policy_row:
-                    continue
+            premium, premium_share = _match_currency_block(
+                block, column_headers, row_labels, premium, premium_share
+            )
 
-                # Use column headers to distinguish Premium from Limit
-                if limit_col and block.col == limit_col:
-                    # This is a Limit column, skip for premium
-                    continue
-
-                # Use row labels to distinguish Premium from % Premium
-                # Note: row_labels stores the LABEL row, data is often in the NEXT row
-                # So we check both the label row and the row after it
-                #
-                # IMPORTANT: "% Premium" (or "Share Premium") is the carrier's share
-                # "Premium" alone is often the total layer premium
-                # For CarrierEntry, we want the carrier's share, so prefer % Premium
-
-                # First check for % Premium / Share Premium row (carrier's share)
-                if percent_premium_row:
-                    if block.row == percent_premium_row or block.row == percent_premium_row + 1:
-                        # This is the carrier's share premium - use as main premium
-                        if premium is None:
-                            premium = val
-                        continue
-
-                # Then check for Premium row (layer total) - only use if no % Premium row
-                if premium_row:
-                    if block.row == premium_row or block.row == premium_row + 1:
-                        # If we have % Premium row, this is layer total - store separately
-                        # If no % Premium row, this IS the carrier premium
-                        if percent_premium_row:
-                            # Store as layer_premium (not used for CarrierEntry)
-                            pass  # Skip layer totals
-                        elif premium is None:
-                            premium = val
-                        continue
-
-                # Check for LIMIT row (contains per-carrier limits, treat as premium)
-                if limit_row and block.row == limit_row:
-                    if premium is None:
-                        premium = val
-                    continue
-
-                # If we have a premium_col column header, only accept values from that column
-                if premium_col and block.col == premium_col:
-                    if premium is None:
-                        premium = val
-                    continue
-                elif premium_col:
-                    # We have a premium_col but this block isn't in it - skip
-                    continue
-
-                # Fallback to column-based logic (no explicit premium_col detected)
-                if premium_share_col and block.col == premium_share_col:
-                    if premium_share is None:
-                        premium_share = val
-                elif premium is None:
-                    premium = val
-                elif premium_share is None:
-                    premium_share = val
-
+        # Match terms
         elif block.field_type == "terms" and terms is None:
             terms = str(block.value).strip()
 
+        # Match layer description
         elif block.field_type == "layer_description" and layer_desc is None:
             layer_desc = str(block.value).strip()
 
-    # Use original_cell if provided (for multi-line carriers), otherwise compute from block
+    # Build cell reference
     cell_ref = original_cell if original_cell else f"{get_column_letter(carrier.col)}{carrier.row}"
 
-    # Parse 'xs.' notation from carrier name or layer description
+    # Parse attachment point from carrier name or layer description
     carrier_name = str(carrier.value).strip()
     _, attachment_point = parse_excess_notation(carrier_name)
     if not attachment_point and layer_desc:
