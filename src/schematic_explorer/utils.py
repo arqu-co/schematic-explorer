@@ -1,5 +1,7 @@
 """Utility functions for Excel cell operations."""
 
+from typing import Any
+
 from openpyxl.utils import range_boundaries
 
 
@@ -12,7 +14,7 @@ def find_merged_range_at(ws, row: int, col: int) -> str | None:
     return None
 
 
-def get_cell_value(ws, row: int, col: int):
+def get_cell_value(ws, row: int, col: int) -> Any:
     """Get cell value, handling merged cells (value is in top-left)."""
     merged = find_merged_range_at(ws, row, col)
     if merged:

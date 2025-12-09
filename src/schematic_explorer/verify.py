@@ -133,7 +133,7 @@ CROSS_VALIDATION_SCHEMA = {
 }
 
 
-def _get_client():
+def _get_client() -> genai.GenerativeModel:
     """Initialize Gemini client."""
     load_dotenv()
     api_key = os.getenv("GEMINI_API_KEY")
@@ -474,7 +474,9 @@ def _make_gemini_request(
     except Exception as e:
         structured_error_msg = str(e)
         logger.warning(
-            "%s: structured output failed (%s), using fallback parser", context, structured_error_msg
+            "%s: structured output failed (%s), using fallback parser",
+            context,
+            structured_error_msg,
         )
 
     # Fallback: try without schema enforcement
@@ -483,11 +485,15 @@ def _make_gemini_request(
         raw_response = response.text
         data = _parse_json_response(raw_response)
         logger.info("%s: fallback parser succeeded", context)
-        return data, raw_response, {
-            "parsing_method": "fallback",
-            "fallback_used": True,
-            "structured_error": structured_error_msg,
-        }
+        return (
+            data,
+            raw_response,
+            {
+                "parsing_method": "fallback",
+                "fallback_used": True,
+                "structured_error": structured_error_msg,
+            },
+        )
     except Exception as fallback_error:
         logger.error("%s: fallback parser also failed (%s)", context, str(fallback_error))
         raise Exception(

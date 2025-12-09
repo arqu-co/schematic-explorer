@@ -28,14 +28,16 @@ from .types import CarrierEntry, LayerSummary, VerificationResult
 __version__ = "0.1.0"
 
 
-def verify_file(filepath: str, sheet_name: str | None = None):
+def verify_file(filepath: str, sheet_name: str | None = None) -> VerificationResult:
     """Lazy import to avoid requiring google-generativeai for basic usage."""
     from .verify import verify_file as _verify_file
 
     return _verify_file(filepath, sheet_name)
 
 
-def verify_extraction(filepath: str, entries, sheet_name: str | None = None):
+def verify_extraction(
+    filepath: str, entries: list[CarrierEntry], sheet_name: str | None = None
+) -> VerificationResult:
     """Lazy import to avoid requiring google-generativeai for basic usage."""
     from .verify import verify_extraction as _verify_extraction
 

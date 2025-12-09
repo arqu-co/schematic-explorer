@@ -149,7 +149,7 @@ def _normalize_for_match(s: str) -> str:
     return re.sub(r"[^a-z0-9\s]", "", s.lower()).strip()
 
 
-def _load_carriers():
+def _load_carriers() -> None:
     """Load carrier lists from YAML file."""
     global _KNOWN_CARRIERS, _NON_CARRIERS
     if _KNOWN_CARRIERS:  # Already loaded
@@ -482,7 +482,7 @@ def _find_all_blocks(ws) -> list[Block]:
     return blocks
 
 
-def _classify_blocks(blocks: list[Block]):
+def _classify_blocks(blocks: list[Block]) -> None:
     """Classify each block by analyzing its content."""
     for block in blocks:
         block.field_type, block.confidence = _infer_type(block.value)
@@ -725,13 +725,15 @@ def _build_layer_info(primary_limits: list[Block], max_row: int) -> list[dict]:
     layers = []
     for i, block in enumerate(primary_limits):
         end_row = primary_limits[i + 1].row - 1 if i + 1 < len(primary_limits) else max_row
-        layers.append({
-            "limit": _format_limit(block.value),
-            "limit_row": block.row,
-            "limit_col": block.col,
-            "start_row": block.row,
-            "end_row": end_row,
-        })
+        layers.append(
+            {
+                "limit": _format_limit(block.value),
+                "limit_row": block.row,
+                "limit_col": block.col,
+                "start_row": block.row,
+                "end_row": end_row,
+            }
+        )
     return layers
 
 
@@ -907,7 +909,7 @@ def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
     return headers
 
 
-def _classify_sub_header(val_lower: str, col: int, headers: dict):
+def _classify_sub_header(val_lower: str, col: int, headers: dict) -> None:
     """Classify a sub-header within a layer."""
     if val_lower == "rate" and "rate_col" not in headers:
         headers["rate_col"] = col
@@ -919,7 +921,7 @@ def _classify_sub_header(val_lower: str, col: int, headers: dict):
             headers["tiv_data_col"] = col + 1
 
 
-def _classify_column_header(val_lower: str, col: int, headers: dict):
+def _classify_column_header(val_lower: str, col: int, headers: dict) -> None:
     """Classify a column header and update headers dict."""
     if "premium" in val_lower and "limit" not in val_lower:
         if "% premium" in val_lower or "share" in val_lower:
@@ -972,7 +974,7 @@ def _find_row_labels(ws, blocks: list[Block], layer: dict) -> dict:
     return labels
 
 
-def _classify_row_label(val_lower: str, row: int, labels: dict):
+def _classify_row_label(val_lower: str, row: int, labels: dict) -> None:
     """Classify a row label and update the labels dict if not already set."""
     # Identify row types by labels
     if "premium" in val_lower:
@@ -1297,7 +1299,7 @@ def _parse_currency(value) -> float:
     return None
 
 
-def _load_workbook(filepath: str, sheet_name: str | None = None):
+def _load_workbook(filepath: str, sheet_name: str | None = None) -> Any:
     """Load workbook and return worksheet, with proper error handling.
 
     Args:
@@ -1305,7 +1307,7 @@ def _load_workbook(filepath: str, sheet_name: str | None = None):
         sheet_name: Optional sheet name
 
     Returns:
-        Worksheet object
+        Worksheet object (openpyxl.worksheet.worksheet.Worksheet)
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -1321,7 +1323,9 @@ def _load_workbook(filepath: str, sheet_name: str | None = None):
         raise FileNotFoundError(f"File not found: {filepath}")
 
     if path.suffix.lower() not in (".xlsx", ".xlsm", ".xltx", ".xltm"):
-        raise ValueError(f"Unsupported file format: {path.suffix}. Expected .xlsx, .xlsm, .xltx, or .xltm")
+        raise ValueError(
+            f"Unsupported file format: {path.suffix}. Expected .xlsx, .xlsm, .xltx, or .xltm"
+        )
 
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True)
