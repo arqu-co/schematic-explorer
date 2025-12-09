@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""
+Preflight check for Excel files - assess extraction confidence before processing.
+
+Usage:
+    bin/preflight <file>           # Check a specific file
+    bin/preflight all              # Check all files in input/
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from schematic_explorer import preflight, PreflightResult
+
+INPUT_DIR = PROJECT_ROOT / "input"
+
+SHEET_MAP = {
+    "Sample Tower SM.xlsx": "BOUND Property Tower",
+}
+
+
+def print_result(result: PreflightResult):
+    """Print preflight result."""
+    # Status indicator
+    if result.confidence >= 0.8:
+        status = "✓ READY"
+        color = "\033[92m"  # Green
+    elif result.confidence >= 0.5:
+        status = "△ PARTIAL"
+        color = "\033[93m"  # Yellow
+    else:
+        status = "✗ LOW CONFIDENCE"
+        color = "\033[91m"  # Red
+
+    reset = "\033[0m"
+
+    print(f"\n{'='*60}")
+    print(f"File: {result.file_name}")
+    print(f"Sheet: {result.sheet_name}")
+    print("=" * 60)
+    print(f"Status: {color}{status}{reset} ({result.confidence:.0%} confidence)")
+    print()
+    print("Detection Summary:")
+    print(f"  Layers:       {result.layers_found} found")
+    print(f"  Carriers:     {result.carriers_found} found")
+    print(f"  Percentages:  {'Yes' if result.has_percentages else 'No'}")
+    print(f"  Currency:     {'Yes' if result.has_currency else 'No'}")
+    print(f"  Terms:        {'Yes' if result.has_terms else 'No'}")
+
+    if result.issues:
+        print()
+        print("Issues:")
+        for issue in result.issues:
+            print(f"  - {issue}")
+
+    if result.suggestions:
+        print()
+        print("Suggestions:")
+        for suggestion in result.suggestions:
+            print(f"  - {suggestion}")
+
+    return result.can_extract
+
+
+def cmd_file(filepath: str) -> int:
+    """Check a specific file."""
+    path = Path(filepath)
+    if not path.exists():
+        path = INPUT_DIR / filepath
+    if not path.exists():
+        print(f"File not found: {filepath}")
+        return 1
+
+    sheet = SHEET_MAP.get(path.name)
+    result = preflight(str(path), sheet)
+    can_extract = print_result(result)
+
+    return 0 if can_extract else 1
+
+
+def cmd_all() -> int:
+    """Check all files in input directory."""
+    files = list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+    if not files:
+        print("No Excel files found in input/")
+        return 1
+
+    print(f"Checking {len(files)} file(s)...\n")
+
+    results = []
+    for f in files:
+        sheet = SHEET_MAP.get(f.name)
+        result = preflight(str(f), sheet)
+        results.append(result)
+        print_result(result)
+
+    # Summary
+    ready = sum(1 for r in results if r.confidence >= 0.8)
+    partial = sum(1 for r in results if 0.5 <= r.confidence < 0.8)
+    low = sum(1 for r in results if r.confidence < 0.5)
+
+    print(f"\n{'='*60}")
+    print("SUMMARY")
+    print("=" * 60)
+    print(f"  Ready:         {ready}/{len(results)}")
+    print(f"  Partial:       {partial}/{len(results)}")
+    print(f"  Low confidence: {low}/{len(results)}")
+
+    avg_confidence = sum(r.confidence for r in results) / len(results)
+    print(f"  Avg confidence: {avg_confidence:.0%}")
+
+    return 0 if low == 0 else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Preflight check for Excel files")
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default="all",
+        help="File to check, or 'all'"
+    )
+    args = parser.parse_args()
+
+    target = args.target.lower() if args.target else "all"
+
+    if target == "all":
+        return cmd_all()
+    else:
+        return cmd_file(args.target)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
