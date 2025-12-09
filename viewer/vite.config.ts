@@ -26,10 +26,19 @@ export default defineConfig({
         })
 
         // API endpoint: serve data files
-        server.middlewares.use('/api/data', (req, res) => {
-          const fileName = req.url?.slice(1) || ''
+        server.middlewares.use('/api/data/', (req, res, next) => {
+          // Extract filename from URL (after /api/data/)
+          const url = req.url || ''
+          const fileName = decodeURIComponent(url.slice(1)) // Remove leading /
+
+          if (!fileName) {
+            next()
+            return
+          }
+
           const filePath = path.join(outputDir, fileName)
 
+          // Security check
           if (!filePath.startsWith(outputDir)) {
             res.statusCode = 403
             res.end('Forbidden')
@@ -46,7 +55,7 @@ export default defineConfig({
             res.end(content)
           } catch {
             res.statusCode = 404
-            res.end('Not found')
+            res.end('Not found: ' + fileName)
           }
         })
       }
