@@ -2,7 +2,6 @@
 
 import json
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -10,10 +9,10 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 
-from .models import CarrierEntry, LayerSummary
+from .types import CarrierEntry, LayerSummary, VerificationResult
 
 # Output directory for snapshots
-OUTPUT_DIR = Path(__file__).parent.parent / "output"
+OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
 
 
 # Schema for structured output (Gemini-compatible format)
@@ -107,16 +106,6 @@ CROSS_VALIDATION_SCHEMA = {
     },
     "required": ["adjusted_score", "summary", "confirmed_issues", "dismissed_issues", "new_issues", "suggestions"]
 }
-
-
-@dataclass
-class VerificationResult:
-    """Result of verification check."""
-    score: float  # 0.0 to 1.0
-    summary: str
-    issues: list[str]
-    suggestions: list[str]
-    raw_response: str
 
 
 def _get_client():
@@ -795,9 +784,9 @@ def verify_file(filepath: str, sheet_name: Optional[str] = None) -> Verification
     Returns:
         VerificationResult with cross-validated findings
     """
-    from .extract import extract_tower_data
+    from .extractor import extract_schematic_with_summaries
 
-    entries, layer_summaries = extract_tower_data(filepath, sheet_name)
+    entries, layer_summaries = extract_schematic_with_summaries(filepath, sheet_name)
     if not entries:
         return VerificationResult(
             score=0.0,

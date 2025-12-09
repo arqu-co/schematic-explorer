@@ -41,3 +41,5 @@ input/
 output/
 .env
 .last_processed
+.convext/backups
+.coverage

@@ -16,17 +16,12 @@ import argparse
 import json
 import random
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from tower_extractor import (
-    extract_tower_data,
-    render_html,
-    verify_file,
-)
+from schematic_explorer import extract_schematic_with_summaries, verify_file
 
 INPUT_DIR = PROJECT_ROOT / "input"
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -47,7 +42,7 @@ def get_excel_files() -> list[Path]:
 
 
 def process_file(filepath: Path) -> bool:
-    """Process a single Excel file, generating HTML and JSON outputs."""
+    """Process a single Excel file, generating JSON output."""
     stem = filepath.stem
     sheet = SHEET_MAP.get(filepath.name)
 
@@ -58,32 +53,20 @@ def process_file(filepath: Path) -> bool:
     print("=" * 60)
 
     try:
-        # Extract structured data (returns entries and layer summaries for cross-checking)
-        entries, layer_summaries = extract_tower_data(str(filepath), sheet)
+        # Extract structured data
+        entries, layer_summaries = extract_schematic_with_summaries(str(filepath), sheet)
 
         if not entries:
             print("  SKIPPED: No carrier data found")
             return False
 
-        extracted_data = [asdict(e) for e in entries]
-
         # Run verification if enabled
-        verification_data = None
         if VERIFY_ENABLED:
-            verification_data = run_verification(filepath, sheet)
-
-        # Generate tower visualization HTML
-        title = f"Insurance Tower - {stem}"
-        html_content = render_html(entries, title=title, verification=verification_data)
-
-        # Write HTML output
-        html_path = OUTPUT_DIR / f"{stem}.html"
-        html_path.write_text(html_content)
-        print(f"  HTML: {html_path.name}")
+            run_verification(filepath, sheet)
 
         # Write JSON output
         json_path = OUTPUT_DIR / f"{stem}.json"
-        json_path.write_text(json.dumps(extracted_data, indent=2))
+        json_path.write_text(json.dumps(entries, indent=2))
         print(f"  JSON: {json_path.name}")
 
         print(f"  Extracted {len(entries)} carrier entries")
@@ -91,11 +74,13 @@ def process_file(filepath: Path) -> bool:
 
     except Exception as e:
         print(f"  ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def run_verification(filepath: Path, sheet: str = None) -> dict:
-    """Run AI verification on extracted data. Returns dict for HTML embedding."""
+def run_verification(filepath: Path, sheet: str = None):
+    """Run AI verification on extracted data."""
     try:
         result = verify_file(str(filepath), sheet)
         score = result.score
@@ -115,15 +100,8 @@ def run_verification(filepath: Path, sheet: str = None) -> dict:
             for issue in result.issues[:2]:
                 print(f"    - {issue}")
 
-        return {
-            "score": result.score,
-            "summary": result.summary,
-            "issues": result.issues,
-            "suggestions": result.suggestions,
-        }
     except Exception as e:
         print(f"  VERIFY ERROR: {e}")
-        return None
 
 
 def save_state(files: list[Path]):

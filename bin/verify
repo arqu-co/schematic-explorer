@@ -11,13 +11,12 @@ Usage:
 import argparse
 import json
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from tower_extractor import extract_tower_data, verify_file, render_html
+from schematic_explorer import verify_file
 
 INPUT_DIR = PROJECT_ROOT / "input"
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -111,32 +110,8 @@ def save_insights_txt(filepath: Path, result):
     return txt_path
 
 
-def update_html_with_verification(filepath: Path, result):
-    """Regenerate HTML file with verification results embedded."""
-    sheet = SHEET_MAP.get(filepath.name)
-    entries, layer_summaries = extract_tower_data(str(filepath), sheet)
-
-    if not entries:
-        return
-
-    verification_data = {
-        "score": result.score,
-        "summary": result.summary,
-        "issues": result.issues,
-        "suggestions": result.suggestions,
-    }
-
-    title = f"Insurance Tower - {filepath.stem}"
-    html_content = render_html(entries, title=title, verification=verification_data)
-
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    output_path = OUTPUT_DIR / f"{filepath.stem}.html"
-    output_path.write_text(html_content)
-    print(f"  HTML updated: {output_path.name}")
-
-
 def verify_single(filepath: Path) -> float:
-    """Verify a single file, update HTML, save insights, and return score."""
+    """Verify a single file, save insights, and return score."""
     sheet = SHEET_MAP.get(filepath.name)
     result = verify_file(str(filepath), sheet)
     score = print_result(filepath, result)
@@ -144,9 +119,6 @@ def verify_single(filepath: Path) -> float:
     # Save insights to txt file
     txt_path = save_insights_txt(filepath, result)
     print(f"  Insights saved: {txt_path.name}")
-
-    # Update HTML with verification results
-    update_html_with_verification(filepath, result)
 
     return score
 
