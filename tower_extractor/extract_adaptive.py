@@ -570,18 +570,24 @@ def _format_limit(value) -> str:
     return str(value)
 
 
-def _split_multiline_carrier(carrier_block: Block) -> list[Block]:
-    """Split a carrier block containing multiple carriers (newlines) into separate blocks."""
+def _split_multiline_carrier(carrier_block: Block) -> list[tuple[Block, str]]:
+    """Split a carrier block containing multiple carriers (newlines) into separate blocks.
+
+    Returns list of tuples: (block, original_cell_ref)
+    The original_cell_ref preserves the actual Excel cell for traceability.
+    """
     value = carrier_block.value
+    original_cell = f"{get_column_letter(carrier_block.col)}{carrier_block.row}"
+
     if not isinstance(value, str):
-        return [carrier_block]
+        return [(carrier_block, original_cell)]
 
     # Split on newlines
     lines = [line.strip() for line in value.split('\n') if line.strip()]
 
     # If only one line, return original
     if len(lines) <= 1:
-        return [carrier_block]
+        return [(carrier_block, original_cell)]
 
     # Create a new block for each line
     split_blocks = []
@@ -592,9 +598,10 @@ def _split_multiline_carrier(carrier_block: Block) -> list[Block]:
         if _is_non_carrier(line):
             continue
 
-        # Create new block with same position but different value
+        # Create new block with adjusted row for data matching
+        # but preserve original cell reference for traceability
         new_block = Block(
-            row=carrier_block.row + i,  # Adjust row for tracking
+            row=carrier_block.row + i,  # Adjust row for data proximity matching
             col=carrier_block.col,
             value=line,
             rows=1,
@@ -602,9 +609,9 @@ def _split_multiline_carrier(carrier_block: Block) -> list[Block]:
             field_type='carrier',
             confidence=carrier_block.confidence
         )
-        split_blocks.append(new_block)
+        split_blocks.append((new_block, original_cell))
 
-    return split_blocks if split_blocks else [carrier_block]
+    return split_blocks if split_blocks else [(carrier_block, original_cell)]
 
 
 def _extract_layer_data(ws, blocks: list[Block], layer: dict, summary_cols: set[int] = None) -> list[CarrierEntry]:
@@ -636,6 +643,7 @@ def _extract_layer_data(ws, blocks: list[Block], layer: dict, summary_cols: set[
                      and b.col not in summary_cols]
 
     # Split multi-line carrier blocks into individual carriers
+    # Returns list of (block, original_cell_ref) tuples
     expanded_carriers = []
     for carrier in carrier_blocks:
         expanded_carriers.extend(_split_multiline_carrier(carrier))
@@ -650,8 +658,8 @@ def _extract_layer_data(ws, blocks: list[Block], layer: dict, summary_cols: set[
                   and b.col not in summary_cols]
 
     # Try to match carriers with their data using spatial proximity
-    for carrier in expanded_carriers:
-        entry = _build_entry_from_proximity(ws, carrier, data_blocks, layer, column_headers, row_labels)
+    for carrier, original_cell in expanded_carriers:
+        entry = _build_entry_from_proximity(ws, carrier, data_blocks, layer, column_headers, row_labels, original_cell)
         if entry:
             entries.append(entry)
 
@@ -808,8 +816,14 @@ def _classify_row_label(val_lower: str, row: int, labels: dict):
 
 def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
                                  layer: dict, column_headers: dict = None,
-                                 row_labels: dict = None) -> CarrierEntry:
-    """Build a CarrierEntry by finding spatially related data blocks."""
+                                 row_labels: dict = None,
+                                 original_cell: str = None) -> CarrierEntry:
+    """Build a CarrierEntry by finding spatially related data blocks.
+
+    Args:
+        original_cell: The actual Excel cell reference (for multi-line carriers,
+                      this preserves the original cell rather than artificial row offset)
+    """
 
     # Find data in same column or within carrier's column span
     col_range = range(carrier.col, carrier.col + carrier.cols)
@@ -961,6 +975,9 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
         elif block.field_type == 'layer_description' and layer_desc is None:
             layer_desc = str(block.value).strip()
 
+    # Use original_cell if provided (for multi-line carriers), otherwise compute from block
+    cell_ref = original_cell if original_cell else f"{get_column_letter(carrier.col)}{carrier.row}"
+
     return CarrierEntry(
         layer_limit=layer['limit'],
         layer_description=layer_desc or '',
@@ -970,7 +987,7 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
         premium_share=premium_share,
         terms=terms,
         policy_number=None,
-        excel_range=f"{get_column_letter(carrier.col)}{carrier.row}",
+        excel_range=cell_ref,
         col_span=carrier.cols,
         row_span=carrier.rows,
         fill_color=get_cell_color(ws, carrier.row, carrier.col)
