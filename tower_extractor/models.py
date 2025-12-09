@@ -19,6 +19,7 @@ class CarrierEntry:
     col_span: int
     row_span: int
     fill_color: Optional[str] = None
+    attachment_point: Optional[str] = None  # Parsed from "xs." notation (e.g., "$50M xs. $10M" -> "$10M")
 
     def to_dict(self):
         return asdict(self)
@@ -64,6 +65,53 @@ def parse_limit_value(val) -> Optional[str]:
             return val
 
     return None
+
+
+def parse_excess_notation(text: str) -> tuple[Optional[str], Optional[str]]:
+    """Parse 'xs.' or 'x/s' or 'excess' notation from policy description.
+
+    Examples:
+        "Umbrella $50M xs. $50M" -> (limit="$50M", attachment="$50M")
+        "General Liability $40M xs. $10M" -> (limit="$40M", attachment="$10M")
+        "$25M x/s $25M" -> (limit="$25M", attachment="$25M")
+        "Primary Auto $10M" -> (limit="$10M", attachment=None)
+
+    Returns:
+        Tuple of (limit, attachment_point) - either may be None
+    """
+    import re
+
+    if not text or not isinstance(text, str):
+        return None, None
+
+    # Pattern for "xs." or "x/s" or "xs " or "excess of" or "excess" notation
+    # Captures: <optional prefix> <limit> <xs notation> <attachment>
+    patterns = [
+        # "$50M xs. $50M" or "Umbrella $50M xs. $50M"
+        r'(\$[\d,.]+[KMBkmb]?)\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*(\$[\d,.]+[KMBkmb]?)',
+        # "50M xs 50M" without dollar signs
+        r'([\d,.]+[KMBkmb])\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*([\d,.]+[KMBkmb])',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            limit = match.group(1)
+            attachment = match.group(2)
+            # Normalize to have $ prefix
+            if not limit.startswith('$'):
+                limit = '$' + limit
+            if not attachment.startswith('$'):
+                attachment = '$' + attachment
+            return limit.upper(), attachment.upper()
+
+    # Try to extract just a limit without attachment
+    limit_pattern = r'(\$[\d,.]+[KMBkmb]?)'
+    match = re.search(limit_pattern, text)
+    if match:
+        return match.group(1).upper(), None
+
+    return None, None
 
 
 def parse_limit_for_sort(limit_str: str) -> float:

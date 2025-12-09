@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 from openpyxl.utils import get_column_letter, range_boundaries
-from .models import CarrierEntry, LayerSummary, parse_limit_value
+from .models import CarrierEntry, LayerSummary, parse_limit_value, parse_excess_notation
 from .utils import get_cell_value, get_cell_color, find_merged_range_at
 
 
@@ -1001,10 +1001,16 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
     # Use original_cell if provided (for multi-line carriers), otherwise compute from block
     cell_ref = original_cell if original_cell else f"{get_column_letter(carrier.col)}{carrier.row}"
 
+    # Parse 'xs.' notation from carrier name or layer description
+    carrier_name = str(carrier.value).strip()
+    _, attachment_point = parse_excess_notation(carrier_name)
+    if not attachment_point and layer_desc:
+        _, attachment_point = parse_excess_notation(layer_desc)
+
     return CarrierEntry(
         layer_limit=layer['limit'],
         layer_description=layer_desc or '',
-        carrier=str(carrier.value).strip(),
+        carrier=carrier_name,
         participation_pct=participation,
         premium=premium,
         premium_share=premium_share,
@@ -1013,7 +1019,8 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
         excel_range=cell_ref,
         col_span=carrier.cols,
         row_span=carrier.rows,
-        fill_color=get_cell_color(ws, carrier.row, carrier.col)
+        fill_color=get_cell_color(ws, carrier.row, carrier.col),
+        attachment_point=attachment_point
     )
 
 
