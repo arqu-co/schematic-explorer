@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Process insurance tower Excel files.
+
+Usage:
+    bin/process all              # Process all files in input/
+    bin/process random           # Process a random file from input/
+    bin/process last             # Re-run the last processed file(s)
+    bin/process <file>           # Process a specific file
+
+    bin/process all --verify     # Process and verify all files
+    bin/process random --verify  # Process and verify a random file
+"""
+
+import argparse
+import json
+import random
+import sys
+from dataclasses import asdict
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from tower_extractor import (
+    extract_tower_data,
+    render_html,
+    verify_file,
+)
+
+INPUT_DIR = PROJECT_ROOT / "input"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+STATE_FILE = PROJECT_ROOT / ".last_processed"
+
+SHEET_MAP = {
+    "Sample Tower SM.xlsx": "BOUND Property Tower",
+}
+
+# Global flag for verification
+VERIFY_ENABLED = False
+
+
+def get_excel_files() -> list[Path]:
+    """Get all Excel files from input directory."""
+    return list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+
+
+def process_file(filepath: Path) -> bool:
+    """Process a single Excel file, generating HTML and JSON outputs."""
+    stem = filepath.stem
+    sheet = SHEET_MAP.get(filepath.name)
+
+    print(f"\n{'='*60}")
+    print(f"Processing: {filepath.name}")
+    if sheet:
+        print(f"Sheet: {sheet}")
+    print("=" * 60)
+
+    try:
+        # Extract structured data (returns entries and layer summaries for cross-checking)
+        entries, layer_summaries = extract_tower_data(str(filepath), sheet)
+
+        if not entries:
+            print("  SKIPPED: No carrier data found")
+            return False
+
+        extracted_data = [asdict(e) for e in entries]
+
+        # Run verification if enabled
+        verification_data = None
+        if VERIFY_ENABLED:
+            verification_data = run_verification(filepath, sheet)
+
+        # Generate tower visualization HTML
+        title = f"Insurance Tower - {stem}"
+        html_content = render_html(entries, title=title, verification=verification_data)
+
+        # Write HTML output
+        html_path = OUTPUT_DIR / f"{stem}.html"
+        html_path.write_text(html_content)
+        print(f"  HTML: {html_path.name}")
+
+        # Write JSON output
+        json_path = OUTPUT_DIR / f"{stem}.json"
+        json_path.write_text(json.dumps(extracted_data, indent=2))
+        print(f"  JSON: {json_path.name}")
+
+        print(f"  Extracted {len(entries)} carrier entries")
+        return True
+
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        return False
+
+
+def run_verification(filepath: Path, sheet: str = None) -> dict:
+    """Run AI verification on extracted data. Returns dict for HTML embedding."""
+    try:
+        result = verify_file(str(filepath), sheet)
+        score = result.score
+
+        # Score indicator
+        if score >= 0.9:
+            indicator = "✓ EXCELLENT"
+        elif score >= 0.7:
+            indicator = "○ GOOD"
+        elif score >= 0.5:
+            indicator = "△ FAIR"
+        else:
+            indicator = "✗ POOR"
+
+        print(f"  VERIFY: {score:.0%} {indicator}")
+        if result.issues:
+            for issue in result.issues[:2]:
+                print(f"    - {issue}")
+
+        return {
+            "score": result.score,
+            "summary": result.summary,
+            "issues": result.issues,
+            "suggestions": result.suggestions,
+        }
+    except Exception as e:
+        print(f"  VERIFY ERROR: {e}")
+        return None
+
+
+def save_state(files: list[Path]):
+    """Save processed files to state file."""
+    STATE_FILE.write_text(json.dumps([str(f) for f in files]))
+
+
+def load_state() -> list[Path]:
+    """Load last processed files from state file."""
+    if not STATE_FILE.exists():
+        return []
+    try:
+        return [Path(f) for f in json.loads(STATE_FILE.read_text())]
+    except (json.JSONDecodeError, KeyError):
+        return []
+
+
+def cmd_all():
+    """Process all files in input directory."""
+    files = get_excel_files()
+    if not files:
+        print("No Excel files found in input/")
+        return 1
+
+    print(f"Found {len(files)} file(s) to process")
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    for f in files:
+        process_file(f)
+
+    save_state(files)
+    print(f"\nDone! Processed {len(files)} file(s)")
+    return 0
+
+
+def cmd_random():
+    """Process a random file from input directory."""
+    files = get_excel_files()
+    if not files:
+        print("No Excel files found in input/")
+        return 1
+
+    chosen = random.choice(files)
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    process_file(chosen)
+    save_state([chosen])
+    return 0
+
+
+def cmd_last():
+    """Re-run the last processed file(s)."""
+    files = load_state()
+    if not files:
+        print("No previous run found. Use 'all' or 'random' first.")
+        return 1
+
+    # Filter to files that still exist
+    files = [f for f in files if f.exists()]
+    if not files:
+        print("Previously processed files no longer exist.")
+        return 1
+
+    print(f"Re-processing {len(files)} file(s) from last run")
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    for f in files:
+        process_file(f)
+
+    return 0
+
+
+def cmd_file(filepath: str):
+    """Process a specific file."""
+    path = Path(filepath)
+    if not path.exists():
+        path = INPUT_DIR / filepath
+    if not path.exists():
+        print(f"File not found: {filepath}")
+        return 1
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    process_file(path)
+    save_state([path])
+    return 0
+
+
+def main():
+    global VERIFY_ENABLED
+
+    parser = argparse.ArgumentParser(description="Process insurance tower Excel files")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="all",
+        help="Command: all, random, last, or a specific file path"
+    )
+    parser.add_argument(
+        "--verify", "-v",
+        action="store_true",
+        help="Run AI verification after extraction"
+    )
+    args = parser.parse_args()
+
+    VERIFY_ENABLED = args.verify
+    cmd = args.command.lower() if args.command else "all"
+
+    if cmd == "all":
+        return cmd_all()
+    elif cmd == "random":
+        return cmd_random()
+    elif cmd == "last":
+        return cmd_last()
+    else:
+        return cmd_file(args.command)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

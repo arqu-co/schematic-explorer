@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""
+Verify extraction accuracy using Gemini AI.
+
+Usage:
+    bin/verify <file>              # Verify a specific file
+    bin/verify all                 # Verify all files in input/
+    bin/verify last                # Verify last processed file(s)
+"""
+
+import argparse
+import json
+import sys
+from dataclasses import asdict
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from tower_extractor import extract_tower_data, verify_file, render_html
+
+INPUT_DIR = PROJECT_ROOT / "input"
+OUTPUT_DIR = PROJECT_ROOT / "output"
+STATE_FILE = PROJECT_ROOT / ".last_processed"
+
+SHEET_MAP = {
+    "Sample Tower SM.xlsx": "BOUND Property Tower",
+}
+
+
+def get_excel_files() -> list[Path]:
+    """Get all Excel files from input directory."""
+    return list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+
+
+def load_state() -> list[Path]:
+    """Load last processed files from state file."""
+    if not STATE_FILE.exists():
+        return []
+    try:
+        return [Path(f) for f in json.loads(STATE_FILE.read_text())]
+    except (json.JSONDecodeError, KeyError):
+        return []
+
+
+def print_result(filepath: Path, result):
+    """Print verification result."""
+    print(f"\n{'='*60}")
+    print(f"File: {filepath.name}")
+    print("=" * 60)
+
+    score = result.score
+    if score >= 0.9:
+        indicator = "✓ EXCELLENT"
+    elif score >= 0.7:
+        indicator = "○ GOOD"
+    elif score >= 0.5:
+        indicator = "△ FAIR"
+    else:
+        indicator = "✗ POOR"
+
+    print(f"Score: {score:.0%} {indicator}")
+    print(f"Summary: {result.summary}")
+
+    if result.issues:
+        print("\nIssues:")
+        for issue in result.issues:
+            print(f"  - {issue}")
+
+    if result.suggestions:
+        print("\nSuggestions:")
+        for suggestion in result.suggestions:
+            print(f"  - {suggestion}")
+
+    return score
+
+
+def save_insights_txt(filepath: Path, result):
+    """Save verification insights to a txt file."""
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    txt_path = OUTPUT_DIR / f"{filepath.stem}_insights.txt"
+
+    lines = [
+        f"Verification Insights: {filepath.name}",
+        "=" * 60,
+        "",
+        f"Score: {result.score:.0%}",
+        f"Summary: {result.summary}",
+        "",
+    ]
+
+    if result.issues:
+        lines.append("ISSUES FOUND:")
+        lines.append("-" * 40)
+        for i, issue in enumerate(result.issues, 1):
+            lines.append(f"{i}. {issue}")
+        lines.append("")
+
+    if result.suggestions:
+        lines.append("SUGGESTIONS:")
+        lines.append("-" * 40)
+        for i, suggestion in enumerate(result.suggestions, 1):
+            lines.append(f"{i}. {suggestion}")
+        lines.append("")
+
+    lines.append("=" * 60)
+    lines.append(f"Raw Response Length: {len(result.raw_response)} chars")
+
+    txt_path.write_text("\n".join(lines))
+    return txt_path
+
+
+def update_html_with_verification(filepath: Path, result):
+    """Regenerate HTML file with verification results embedded."""
+    sheet = SHEET_MAP.get(filepath.name)
+    entries, layer_summaries = extract_tower_data(str(filepath), sheet)
+
+    if not entries:
+        return
+
+    verification_data = {
+        "score": result.score,
+        "summary": result.summary,
+        "issues": result.issues,
+        "suggestions": result.suggestions,
+    }
+
+    title = f"Insurance Tower - {filepath.stem}"
+    html_content = render_html(entries, title=title, verification=verification_data)
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_path = OUTPUT_DIR / f"{filepath.stem}.html"
+    output_path.write_text(html_content)
+    print(f"  HTML updated: {output_path.name}")
+
+
+def verify_single(filepath: Path) -> float:
+    """Verify a single file, update HTML, save insights, and return score."""
+    sheet = SHEET_MAP.get(filepath.name)
+    result = verify_file(str(filepath), sheet)
+    score = print_result(filepath, result)
+
+    # Save insights to txt file
+    txt_path = save_insights_txt(filepath, result)
+    print(f"  Insights saved: {txt_path.name}")
+
+    # Update HTML with verification results
+    update_html_with_verification(filepath, result)
+
+    return score
+
+
+def cmd_all():
+    """Verify all files."""
+    files = get_excel_files()
+    if not files:
+        print("No Excel files found in input/")
+        return 1
+
+    print(f"Verifying {len(files)} file(s)...\n")
+    scores = []
+
+    for f in files:
+        try:
+            score = verify_single(f)
+            scores.append(score)
+        except Exception as e:
+            print(f"\nERROR verifying {f.name}: {e}")
+            scores.append(0.0)
+
+    avg_score = sum(scores) / len(scores) if scores else 0
+    print(f"\n{'='*60}")
+    print(f"OVERALL ACCURACY: {avg_score:.0%}")
+    print(f"Files verified: {len(scores)}")
+    print("=" * 60)
+
+    return 0 if avg_score >= 0.7 else 1
+
+
+def cmd_last():
+    """Verify last processed files."""
+    files = load_state()
+    if not files:
+        print("No previous run found.")
+        return 1
+
+    files = [f for f in files if f.exists()]
+    if not files:
+        print("Previously processed files no longer exist.")
+        return 1
+
+    scores = []
+    for f in files:
+        try:
+            score = verify_single(f)
+            scores.append(score)
+        except Exception as e:
+            print(f"\nERROR verifying {f.name}: {e}")
+
+    if len(scores) > 1:
+        avg_score = sum(scores) / len(scores)
+        print(f"\nAverage accuracy: {avg_score:.0%}")
+
+    return 0
+
+
+def cmd_file(filepath: str):
+    """Verify a specific file."""
+    path = Path(filepath)
+    if not path.exists():
+        path = INPUT_DIR / filepath
+    if not path.exists():
+        print(f"File not found: {filepath}")
+        return 1
+
+    verify_single(path)
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Verify extraction accuracy")
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default="last",
+        help="File to verify, or 'all'/'last'"
+    )
+    args = parser.parse_args()
+
+    target = args.target.lower() if args.target else "last"
+
+    if target == "all":
+        return cmd_all()
+    elif target == "last":
+        return cmd_last()
+    else:
+        return cmd_file(args.target)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

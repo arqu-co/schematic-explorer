@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 from openpyxl.utils import get_column_letter, range_boundaries
-from .models import CarrierEntry, parse_limit_value
+from .models import CarrierEntry, LayerSummary, parse_limit_value
 from .utils import get_cell_value, get_cell_color, find_merged_range_at
 
 
@@ -158,8 +158,14 @@ class Block:
     confidence: float = 0.0
 
 
-def extract_adaptive(ws) -> list[CarrierEntry]:
-    """Extract tower data by analyzing merged cell structure and spatial patterns."""
+def extract_adaptive(ws) -> tuple[list[CarrierEntry], list[LayerSummary]]:
+    """Extract tower data by analyzing merged cell structure and spatial patterns.
+
+    Returns:
+        tuple: (carrier_entries, layer_summaries)
+            - carrier_entries: List of per-carrier participation data
+            - layer_summaries: List of layer-level aggregate data (for cross-checking)
+    """
 
     # Step 1: Find all blocks (merged regions and significant single cells)
     blocks = _find_all_blocks(ws)
@@ -169,21 +175,28 @@ def extract_adaptive(ws) -> list[CarrierEntry]:
 
     # Step 3: Detect summary/aggregate columns to exclude from carrier extraction
     # These columns contain layer-level data like "Annualized Layer Rate" not per-carrier data
-    summary_cols = _detect_summary_columns(ws)
+    summary_info = _detect_summary_columns(ws)
+    summary_cols = summary_info['columns']
 
     # Step 4: Find layer structure by looking for large limit values
     layers = _identify_layers(blocks, ws)
 
     # Step 5: For each layer, find carrier blocks and their associated data
     entries = []
+    layer_summaries = []
     for layer in layers:
         layer_entries = _extract_layer_data(ws, blocks, layer, summary_cols)
         entries.extend(layer_entries)
 
-    return entries
+        # Extract layer summary data from summary columns (for cross-checking)
+        summary = _extract_layer_summary(ws, layer, summary_info)
+        if summary:
+            layer_summaries.append(summary)
+
+    return entries, layer_summaries
 
 
-def _detect_summary_columns(ws) -> set[int]:
+def _detect_summary_columns(ws) -> dict:
     """Detect columns that contain summary/aggregate data rather than per-carrier data.
 
     These columns typically have headers like:
@@ -192,9 +205,18 @@ def _detect_summary_columns(ws) -> set[int]:
     - "Layer Rates"
     - "Layer Target"
 
-    Returns set of column numbers to exclude from carrier extraction.
+    Returns dict with:
+        - 'columns': set of column numbers to exclude from carrier extraction
+        - 'bound_premium_col': column with Layer Bound Premiums (for cross-check)
+        - 'layer_target_col': column with Layer Target
+        - 'layer_rate_col': column with Layer Rate
     """
-    summary_cols = set()
+    result = {
+        'columns': set(),
+        'bound_premium_col': None,
+        'layer_target_col': None,
+        'layer_rate_col': None,
+    }
 
     # Patterns that indicate a summary column (not per-carrier data)
     # Must be specific to avoid false positives on things like "Layer Premium" which is per-carrier
@@ -217,10 +239,79 @@ def _detect_summary_columns(ws) -> set[int]:
                 val_lower = ' '.join(val.lower().split())
                 for pattern in summary_patterns:
                     if pattern in val_lower:
-                        summary_cols.add(col)
+                        result['columns'].add(col)
+                        # Track specific column types for extraction
+                        if 'bound premium' in val_lower:
+                            result['bound_premium_col'] = col
+                        elif 'target' in val_lower:
+                            result['layer_target_col'] = col
+                        elif 'rate' in val_lower and 'annualized' not in val_lower:
+                            result['layer_rate_col'] = col
                         break
 
-    return summary_cols
+    return result
+
+
+def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary | None:
+    """Extract layer-level summary data from summary columns.
+
+    This data is used for cross-checking that carrier premiums sum to layer totals.
+
+    Args:
+        ws: The worksheet
+        layer: Layer dict with limit, start_row, end_row
+        summary_info: Dict with bound_premium_col, layer_target_col, layer_rate_col
+
+    Returns:
+        LayerSummary or None if no summary data found for this layer
+    """
+    bound_premium_col = summary_info.get('bound_premium_col')
+    layer_target_col = summary_info.get('layer_target_col')
+    layer_rate_col = summary_info.get('layer_rate_col')
+
+    # If no summary columns detected, skip
+    if not any([bound_premium_col, layer_target_col, layer_rate_col]):
+        return None
+
+    start_row = layer['start_row']
+    end_row = layer['end_row']
+
+    layer_bound_premium = None
+    layer_target = None
+    layer_rate = None
+    excel_range = None
+
+    # Look for values in summary columns within this layer's row range
+    # Summary values are typically in a specific row for each layer
+    for row in range(start_row, end_row + 1):
+        if bound_premium_col:
+            val = get_cell_value(ws, row, bound_premium_col)
+            if val is not None and isinstance(val, (int, float)) and val > 0:
+                layer_bound_premium = float(val)
+                excel_range = f"{get_column_letter(bound_premium_col)}{row}"
+
+        if layer_target_col:
+            val = get_cell_value(ws, row, layer_target_col)
+            if val is not None and isinstance(val, (int, float)) and val > 0:
+                layer_target = float(val)
+
+        if layer_rate_col:
+            val = get_cell_value(ws, row, layer_rate_col)
+            if val is not None and isinstance(val, (int, float)):
+                # Rate could be very small (e.g., 0.0038)
+                layer_rate = float(val)
+
+    # Only return if we found at least one value
+    if layer_bound_premium is not None or layer_target is not None or layer_rate is not None:
+        return LayerSummary(
+            layer_limit=layer['limit'],
+            layer_target=layer_target,
+            layer_rate=layer_rate,
+            layer_bound_premium=layer_bound_premium,
+            excel_range=excel_range
+        )
+
+    return None
 
 
 def _find_all_blocks(ws) -> list[Block]:

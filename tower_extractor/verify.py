@@ -10,7 +10,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 
-from .models import CarrierEntry
+from .models import CarrierEntry, LayerSummary
 
 # Output directory for snapshots
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
@@ -690,12 +690,103 @@ def cross_validate(
         )
 
 
+def cross_check_layer_totals(
+    entries: list[CarrierEntry],
+    layer_summaries: list[LayerSummary],
+    result: VerificationResult
+) -> VerificationResult:
+    """
+    Cross-check extracted carrier premiums against layer summary totals.
+
+    For each layer with a summary, sum the carrier premiums and compare
+    to the layer_bound_premium. Large discrepancies indicate extraction issues.
+
+    Args:
+        entries: Extracted carrier entries
+        layer_summaries: Layer-level summary data from summary columns
+        result: Current verification result to augment
+
+    Returns:
+        Updated VerificationResult with any layer total issues
+    """
+    issues = list(result.issues)
+    suggestions = list(result.suggestions)
+
+    # Build a map of layer -> total bound premium from summaries
+    summary_by_layer = {s.layer_limit: s for s in layer_summaries}
+
+    # Group carrier entries by layer and sum premiums
+    carrier_totals_by_layer = {}
+    for entry in entries:
+        layer = entry.layer_limit
+        if layer not in carrier_totals_by_layer:
+            carrier_totals_by_layer[layer] = 0.0
+        if entry.premium is not None:
+            carrier_totals_by_layer[layer] += entry.premium
+
+    # Cross-check
+    total_discrepancy = 0.0
+    discrepancies_found = 0
+
+    for layer_limit, summary in summary_by_layer.items():
+        if summary.layer_bound_premium is None:
+            continue
+
+        expected = summary.layer_bound_premium
+        actual = carrier_totals_by_layer.get(layer_limit, 0.0)
+
+        # Calculate discrepancy as percentage
+        if expected > 0:
+            discrepancy_pct = abs(expected - actual) / expected
+        else:
+            discrepancy_pct = 0.0 if actual == 0 else 1.0
+
+        # Note: Summary columns may show prior year data, so moderate differences are normal
+        # Only flag extreme discrepancies (> 200% or completely missing carriers)
+
+        # Case 1: Layer has no carriers but should have data (likely extraction issue)
+        if actual == 0 and expected > 10000:
+            discrepancies_found += 1
+            issues.append(
+                f"Layer {layer_limit}: No carrier premiums extracted but "
+                f"summary shows ${expected:,.0f} (cell {summary.excel_range}) - possible extraction gap"
+            )
+        # Case 2: Extreme discrepancy (>3x difference) - likely data error
+        elif discrepancy_pct > 2.0:
+            discrepancies_found += 1
+            issues.append(
+                f"Layer {layer_limit}: Carrier premiums ${actual:,.0f} vs "
+                f"summary ${expected:,.0f} (cell {summary.excel_range}) - "
+                f"{discrepancy_pct:.0%} difference (may be prior year data)"
+            )
+
+    # Adjust score only for severe issues (missing data, not year-over-year variance)
+    score = result.score
+    if discrepancies_found > 0:
+        # Mild penalty - summary mismatches may just be year differences
+        penalty = min(0.05 * discrepancies_found, 0.15)  # Max 15% penalty
+        score = max(0.0, score - penalty)
+        suggestions.append(
+            f"Review {discrepancies_found} layer(s) with significant carrier/summary differences "
+            "(note: summary columns may show prior year data)"
+        )
+
+    return VerificationResult(
+        score=score,
+        summary=result.summary,
+        issues=issues,
+        suggestions=suggestions,
+        raw_response=result.raw_response
+    )
+
+
 def verify_file(filepath: str, sheet_name: Optional[str] = None) -> VerificationResult:
     """
     Extract and verify a single file using two-pass cross-validation.
 
     Pass 1: Initial verification comparing extracted data to source
     Pass 2: Cross-validation to filter false positives and confirm real issues
+    Pass 3: Layer total cross-check using summary columns (if available)
 
     Args:
         filepath: Path to Excel file
@@ -706,7 +797,7 @@ def verify_file(filepath: str, sheet_name: Optional[str] = None) -> Verification
     """
     from .extract import extract_tower_data
 
-    entries = extract_tower_data(filepath, sheet_name)
+    entries, layer_summaries = extract_tower_data(filepath, sheet_name)
     if not entries:
         return VerificationResult(
             score=0.0,
@@ -721,5 +812,9 @@ def verify_file(filepath: str, sheet_name: Optional[str] = None) -> Verification
 
     # Pass 2: Cross-validation to filter false positives
     final_result = cross_validate(filepath, entries, initial_result, sheet_name)
+
+    # Pass 3: Cross-check layer totals against summary columns (if available)
+    if layer_summaries:
+        final_result = cross_check_layer_totals(entries, layer_summaries, final_result)
 
     return final_result
