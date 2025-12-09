@@ -627,6 +627,63 @@ def _infer_type(value) -> tuple[str, float]:
     return "text", 0.3
 
 
+def _has_conflicting_label(block: Block, other: Block) -> bool:
+    """Check if another block indicates this block is not a layer limit.
+
+    Returns True if the other block contains patterns that indicate the
+    current block's row contains data, not layer definitions.
+    """
+    # Check same-row labels that indicate data rows
+    if other.field_type == "label" and other.row == block.row:
+        val_lower = str(other.value).lower()
+        # "LIMIT" in column A means per-carrier limits, not layer limit
+        # "Premium" or "Policy" means this row has data, not layer definitions
+        if "premium" in val_lower or val_lower == "limit" or "policy" in val_lower:
+            return True
+
+    # Check for year patterns in same row - "2019 Bound", "2018 Marketing" etc.
+    # These indicate summary/historical rows, not layer definitions
+    if other.row == block.row:
+        val_str = str(other.value)
+        if re.match(r"^20\d{2}\b", val_str):  # Starts with year like 2019, 2018
+            return True
+
+    # Check the row ABOVE - if it contains "Premium" or "Share Premium" labels,
+    # this row contains premium data, not layer limits
+    if other.field_type == "label" and other.row == block.row - 1:
+        val_lower = str(other.value).lower()
+        if "premium" in val_lower or "participation" in val_lower:
+            return True
+
+    return False
+
+
+def _should_skip_large_number_block(block: Block, blocks: list[Block]) -> bool:
+    """Check if a large_number block should be skipped as a layer limit candidate."""
+    return any(_has_conflicting_label(block, other) for other in blocks)
+
+
+def _is_valid_limit_block(block: Block, blocks: list[Block]) -> bool:
+    """Check if a block is a valid layer limit candidate."""
+    # Must be limit or large_number type with sufficient confidence
+    if block.field_type not in ("limit", "large_number") or block.confidence < 0.7:
+        return False
+
+    # Only consider blocks in leftmost columns (A or B) for layer limits
+    if block.col > MAX_LAYER_LIMIT_COLUMN:
+        return False
+
+    # Filter out aggregate totals - numbers > $1B are almost never layer limits
+    if isinstance(block.value, int | float) and block.value > BILLION:
+        return False
+
+    # For large_number type, check for conflicting labels nearby
+    if block.field_type == "large_number" and _should_skip_large_number_block(block, blocks):
+        return False
+
+    return True
+
+
 def _identify_layers(blocks: list[Block], ws) -> list[dict]:
     """Identify layer boundaries from limit blocks."""
     # Find blocks that look like layer limits
@@ -634,91 +691,47 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
     # 1. In column A or B (leftmost columns)
     # 2. Formatted as dollar amounts with M/K suffix, OR
     # 3. Large numbers that are explicitly labeled as limits
-    limit_blocks = []
-    for b in blocks:
-        if b.field_type not in ("limit", "large_number") or b.confidence < 0.7:
-            continue
-
-        # Only consider blocks in leftmost columns (A or B) for layer limits
-        # This prevents premium values from being mistaken as layer limits
-        if b.col > MAX_LAYER_LIMIT_COLUMN:
-            continue
-
-        # Filter out aggregate totals - numbers > $1B are almost never layer limits
-        # They're typically year-over-year totals or summary figures at the bottom of schematics
-        if isinstance(b.value, int | float) and b.value > BILLION:
-            continue
-
-        # For large_number type, be more selective - only if it looks like a layer limit
-        if b.field_type == "large_number":
-            # Check if there's a label nearby that indicates this is NOT a layer limit
-            # Labels like "Premium", "LIMIT" (per-carrier), "Policy" indicate data rows
-            skip_block = False
-            for other in blocks:
-                if other.field_type == "label" and other.row == b.row:
-                    val_lower = str(other.value).lower()
-                    # "LIMIT" in column A means per-carrier limits, not layer limit
-                    # "Premium" or "Policy" means this row has data, not layer definitions
-                    if "premium" in val_lower or val_lower == "limit" or "policy" in val_lower:
-                        skip_block = True
-                        break
-                # Also check for year patterns - "2019 Bound", "2018 Marketing" etc.
-                # These indicate summary/historical rows, not layer definitions
-                if other.row == b.row:
-                    val_str = str(other.value)
-                    if re.match(r"^20\d{2}\b", val_str):  # Starts with year like 2019, 2018
-                        skip_block = True
-                        break
-                # Check the row ABOVE - if it contains "Premium" or "Share Premium" labels,
-                # this row contains premium data, not layer limits
-                if other.field_type == "label" and other.row == b.row - 1:
-                    val_lower = str(other.value).lower()
-                    if "premium" in val_lower or "participation" in val_lower:
-                        skip_block = True
-                        break
-            if skip_block:
-                continue
-
-        limit_blocks.append(b)
+    limit_blocks = [b for b in blocks if _is_valid_limit_block(b, blocks)]
 
     # Sort by row
     limit_blocks.sort(key=lambda b: b.row)
 
     # Filter to keep only "primary" limits (leftmost in their row region)
-    # This helps avoid treating layer descriptions as limits
+    primary_limits = _filter_primary_limits(limit_blocks)
+
+    # Build layer info from primary limits
+    return _build_layer_info(primary_limits, ws.max_row)
+
+
+def _is_dominated_by_existing(block: Block, existing_limits: list[Block]) -> bool:
+    """Check if a block is dominated by an existing limit in its row region."""
+    return any(
+        abs(block.row - existing.row) <= LAYER_ROW_PROXIMITY and block.col > existing.col
+        for existing in existing_limits
+    )
+
+
+def _filter_primary_limits(limit_blocks: list[Block]) -> list[Block]:
+    """Filter limit blocks to keep only the primary (leftmost) in each row region."""
     primary_limits = []
     for block in limit_blocks:
-        # Check if there's already a limit in a nearby row
-        dominated = False
-        for existing in primary_limits:
-            # If this block is in similar row range and to the right, skip it
-            if abs(block.row - existing.row) <= LAYER_ROW_PROXIMITY and block.col > existing.col:
-                dominated = True
-                break
-        if not dominated:
+        if not _is_dominated_by_existing(block, primary_limits):
             primary_limits.append(block)
+    return primary_limits
 
-    # Build layer info
+
+def _build_layer_info(primary_limits: list[Block], max_row: int) -> list[dict]:
+    """Build layer info dictionaries from primary limit blocks."""
     layers = []
     for i, block in enumerate(primary_limits):
-        limit_str = _format_limit(block.value)
-
-        # Determine end row
-        if i + 1 < len(primary_limits):
-            end_row = primary_limits[i + 1].row - 1
-        else:
-            end_row = ws.max_row
-
-        layers.append(
-            {
-                "limit": limit_str,
-                "limit_row": block.row,
-                "limit_col": block.col,
-                "start_row": block.row,
-                "end_row": end_row,
-            }
-        )
-
+        end_row = primary_limits[i + 1].row - 1 if i + 1 < len(primary_limits) else max_row
+        layers.append({
+            "limit": _format_limit(block.value),
+            "limit_row": block.row,
+            "limit_col": block.col,
+            "start_row": block.row,
+            "end_row": end_row,
+        })
     return layers
 
 
