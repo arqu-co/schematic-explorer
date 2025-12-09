@@ -29,8 +29,9 @@ SHEET_MAP = {
 
 
 def get_excel_files() -> list[Path]:
-    """Get all Excel files from input directory."""
-    return list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+    """Get all Excel files from input directory (excluding temp lock files)."""
+    files = list(INPUT_DIR.glob("*.xlsx")) + list(INPUT_DIR.glob("*.xls"))
+    return [f for f in files if not f.name.startswith("~$")]
 
 
 def load_state() -> list[Path]:
