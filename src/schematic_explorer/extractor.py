@@ -10,6 +10,7 @@ This extractor analyzes the spreadsheet structure from first principles:
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 from openpyxl.utils import get_column_letter, range_boundaries
@@ -17,10 +18,130 @@ from openpyxl.utils import get_column_letter, range_boundaries
 from .types import CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
 from .utils import find_merged_range_at, get_cell_color, get_cell_value
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Numeric thresholds for type inference
+MILLION = 1_000_000
+THOUSAND = 1_000
+BILLION = 1_000_000_000
+
+# Percentage thresholds
+PERCENTAGE_WHOLE_NUMBER_THRESHOLD = 1  # Values > 1 are assumed to be whole number %
+PERCENTAGE_MAX_WHOLE_NUMBER = 100  # Maximum value for whole number percentage
+
+# Proximity thresholds for spatial matching
+MAX_COLUMN_DISTANCE = 3  # Maximum columns away for non-aligned data matching
+MAX_ROW_SEARCH_DISTANCE = 10  # How many rows below carrier to search for data
+LAYER_ROW_PROXIMITY = 2  # Distance threshold for "nearby" layer rows
+
+# Column limits
+MAX_LAYER_LIMIT_COLUMN = 2  # Layer limits should be in columns A or B
+MAX_HEADER_SCAN_ROW = 10  # How many rows to scan for headers
+MAX_HEADER_SCAN_COLUMN = 30  # How many columns to scan for headers
+
+# Policy number constraints
+MAX_POLICY_NUMBER_LENGTH = 30
+MIN_POLICY_NUMBER_DIGITS = 4
+MIN_PURE_NUMERIC_POLICY_LENGTH = 6
+
+# Carrier name constraints
+MIN_CARRIER_NAME_LENGTH = 3
+MAX_CARRIER_NAME_LENGTH = 100
+
+# Patterns that indicate non-carrier text (descriptive/conditional text)
+NON_CARRIER_PHRASES = [
+    "subject to",
+    "conditions",
+    "terms &",
+    "all terms",
+    "tied to",
+    "offer capacity",
+    "no rp for",
+    "loss rating",
+    "increase in",
+    "decrease in",
+    "updated",
+    "by year",
+    "buy down",
+    "all risk",
+    "dic premium",
+    "aggregate",
+]
+
+# Patterns that indicate summary columns (not per-carrier data)
+SUMMARY_COLUMN_PATTERNS = [
+    "annualized",
+    "layer rate",  # "Layer Rates" but not "Layer Premium"
+    "bound premium",
+    "layer target",
+    "total premium",
+    "aggregate",
+]
+
+# Coverage/terms indicators
+COVERAGE_PATTERNS = [
+    "excl",
+    "incl",
+    "flood",
+    "earthquake",
+    "eq ",
+    "wind",
+    "terror",
+    "blanket",
+    "margin",
+    "ded",
+    "retention",
+    "all risk",
+    "dic",
+    "aop",
+    "named storm",
+    "nws",
+]
+
+# Column header label patterns
+LABEL_PATTERNS = [
+    "carrier",
+    "participation",
+    "premium",
+    "share",
+    "layer",
+    "limit",
+    "policy",
+    "terms",
+    "coverage",
+    "deductible",
+    "total",
+]
+
+# Company name suffixes that indicate a carrier
+COMPANY_SUFFIXES = [
+    "inc",
+    "llc",
+    "ltd",
+    "co",
+    "corp",
+    "company",
+    "ins",
+    "insurance",
+    "assurance",
+    "specialty",
+    "group",
+    "re",
+]
+
+# Status indicator values
+STATUS_VALUES = ("tbd", "n/a", "pending", "incumbent", "new", "renewal")
+
+# =============================================================================
+# Carrier Data (loaded from YAML)
+# =============================================================================
+
 # Load carrier lists from YAML
 _CARRIERS_FILE = Path(__file__).parent / "carriers.yml"
-_KNOWN_CARRIERS = set()
-_NON_CARRIERS = set()
+_KNOWN_CARRIERS: set[str] = set()
+_NON_CARRIERS: set[str] = set()
 
 
 def _normalize_for_match(s: str) -> str:
@@ -89,27 +210,7 @@ def _is_non_carrier(value: str) -> bool:
     val_lower = value.lower()
 
     # Sentences or descriptive text (contains multiple words with common patterns)
-    if any(
-        phrase in val_lower
-        for phrase in [
-            "subject to",
-            "conditions",
-            "terms &",
-            "all terms",
-            "tied to",
-            "offer capacity",
-            "no rp for",
-            "loss rating",
-            "increase in",
-            "decrease in",
-            "updated",
-            "by year",
-            "buy down",
-            "all risk",
-            "dic premium",
-            "aggregate",
-        ]
-    ):
+    if any(phrase in val_lower for phrase in NON_CARRIER_PHRASES):
         return True
 
     # Starts with symbols or contains mostly special characters
@@ -125,15 +226,15 @@ def _looks_like_policy_number(value: str) -> bool:
     Policy numbers typically:
     - Are alphanumeric codes (letters + numbers mixed)
     - Have specific patterns like "ABC12345", "12345678", "ABC-123-456"
-    - Are relatively short (< 30 chars)
+    - Are relatively short (< MAX_POLICY_NUMBER_LENGTH chars)
     - Have high digit-to-letter ratio or specific prefixes
     """
-    if not value or len(value) > 30:
+    if not value or len(value) > MAX_POLICY_NUMBER_LENGTH:
         return False
 
     # Pure numeric (likely policy number)
     digits_only = value.replace("-", "").replace(" ", "")
-    if digits_only.isdigit() and len(digits_only) >= 6:
+    if digits_only.isdigit() and len(digits_only) >= MIN_PURE_NUMERIC_POLICY_LENGTH:
         return True
 
     # Count digits and letters
@@ -141,7 +242,7 @@ def _looks_like_policy_number(value: str) -> bool:
     letters = sum(1 for c in value if c.isalpha())
 
     # If mostly digits with some letters, likely policy number
-    if digits >= 4 and digits > letters:
+    if digits >= MIN_POLICY_NUMBER_DIGITS and digits > letters:
         return True
 
     # Common policy number patterns
@@ -167,10 +268,10 @@ class Block:
 
     row: int
     col: int
-    value: any
+    value: Any
     rows: int = 1
     cols: int = 1
-    field_type: str = None
+    field_type: str | None = None
     confidence: float = 0.0
 
 
@@ -234,24 +335,13 @@ def _detect_summary_columns(ws) -> dict:
         "layer_rate_col": None,
     }
 
-    # Patterns that indicate a summary column (not per-carrier data)
-    # Must be specific to avoid false positives on things like "Layer Premium" which is per-carrier
-    summary_patterns = [
-        "annualized",
-        "layer rate",  # "Layer Rates" but not "Layer Premium"
-        "bound premium",
-        "layer target",
-        "total premium",
-        "aggregate",
-    ]
-
     # Also detect year-prefixed layer premium columns (e.g., "2019 Layer Premium")
     # These are summary columns showing premium totals by year, not per-carrier data
     year_layer_premium_pattern = re.compile(r"^\d{4}\s+layer\s+premium", re.IGNORECASE)
 
-    # Scan header rows (typically rows 1-10) for summary column indicators
-    for row in range(1, 11):
-        for col in range(1, min(ws.max_column + 1, 30)):
+    # Scan header rows for summary column indicators
+    for row in range(1, MAX_HEADER_SCAN_ROW + 1):
+        for col in range(1, min(ws.max_column + 1, MAX_HEADER_SCAN_COLUMN)):
             cell = ws.cell(row=row, column=col)
             val = cell.value
             if val and isinstance(val, str):
@@ -275,7 +365,7 @@ def _detect_summary_columns(ws) -> dict:
                                 result["layer_rate_col"] = extra_col
                     continue
 
-                for pattern in summary_patterns:
+                for pattern in SUMMARY_COLUMN_PATTERNS:
                     if pattern in val_lower:
                         result["columns"].add(col)
                         # Track specific column types for extraction
@@ -407,14 +497,14 @@ def _infer_type(value) -> tuple[str, float]:
     if isinstance(value, int | float):
         if value == 0:
             return "zero", 0.5
-        if 0 < value <= 1:
+        if 0 < value <= PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
             return "percentage", 0.9  # High confidence - typical participation format
-        if 1 < value <= 100:
+        if PERCENTAGE_WHOLE_NUMBER_THRESHOLD < value <= PERCENTAGE_MAX_WHOLE_NUMBER:
             # Could be percentage as whole number, or small dollar amount
             return "percentage_or_number", 0.6
-        if value > 1_000_000:
+        if value > MILLION:
             return "large_number", 0.8  # Likely limit or TIV
-        if value > 1_000:
+        if value > THOUSAND:
             return "currency", 0.7  # Likely premium
         return "number", 0.5
 
@@ -445,46 +535,15 @@ def _infer_type(value) -> tuple[str, float]:
         return "percentage_string", 0.9
 
     # Look for terms/coverage indicators
-    coverage_patterns = [
-        "excl",
-        "incl",
-        "flood",
-        "earthquake",
-        "eq ",
-        "wind",
-        "terror",
-        "blanket",
-        "margin",
-        "ded",
-        "retention",
-        "all risk",
-        "dic",
-        "aop",
-        "named storm",
-        "nws",
-    ]
-    if any(p in val_lower for p in coverage_patterns):
+    if any(p in val_lower for p in COVERAGE_PATTERNS):
         return "terms", 0.85
 
     # Common label patterns
-    label_patterns = [
-        "carrier",
-        "participation",
-        "premium",
-        "share",
-        "layer",
-        "limit",
-        "policy",
-        "terms",
-        "coverage",
-        "deductible",
-        "total",
-    ]
-    if val_lower in label_patterns or any(val_lower.startswith(p) for p in label_patterns):
+    if val_lower in LABEL_PATTERNS or any(val_lower.startswith(p) for p in LABEL_PATTERNS):
         return "label", 0.9
 
     # Status indicators
-    if val_lower in ("tbd", "n/a", "pending", "incumbent", "new", "renewal"):
+    if val_lower in STATUS_VALUES:
         return "status", 0.8
 
     # Catch patterns like "% Premium" - labels starting with symbols
@@ -514,31 +573,17 @@ def _infer_type(value) -> tuple[str, float]:
     # - Not starting with $ or digit
     # - Contains letters
     # - May contain common suffixes
-    company_suffixes = [
-        "inc",
-        "llc",
-        "ltd",
-        "co",
-        "corp",
-        "company",
-        "ins",
-        "insurance",
-        "assurance",
-        "specialty",
-        "group",
-        "re",
-    ]
     if (
-        3 <= len(val) <= 100
+        MIN_CARRIER_NAME_LENGTH <= len(val) <= MAX_CARRIER_NAME_LENGTH
         and not val[0].isdigit()
         and not val.startswith("$")
         and any(c.isalpha() for c in val)
     ):
         # Higher confidence if has company suffix
-        if any(s in val_lower for s in company_suffixes):
+        if any(s in val_lower for s in COMPANY_SUFFIXES):
             return "carrier", 0.85
         # Medium confidence for other text that looks like a name
-        if len(val) >= 3 and val[0].isupper():
+        if len(val) >= MIN_CARRIER_NAME_LENGTH and val[0].isupper():
             return "carrier", 0.6
 
     return "text", 0.3
@@ -558,12 +603,12 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
 
         # Only consider blocks in leftmost columns (A or B) for layer limits
         # This prevents premium values from being mistaken as layer limits
-        if b.col > 2:
+        if b.col > MAX_LAYER_LIMIT_COLUMN:
             continue
 
         # Filter out aggregate totals - numbers > $1B are almost never layer limits
         # They're typically year-over-year totals or summary figures at the bottom of schematics
-        if isinstance(b.value, int | float) and b.value > 1_000_000_000:
+        if isinstance(b.value, int | float) and b.value > BILLION:
             continue
 
         # For large_number type, be more selective - only if it looks like a layer limit
@@ -609,7 +654,7 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
         dominated = False
         for existing in primary_limits:
             # If this block is in similar row range and to the right, skip it
-            if abs(block.row - existing.row) <= 2 and block.col > existing.col:
+            if abs(block.row - existing.row) <= LAYER_ROW_PROXIMITY and block.col > existing.col:
                 dominated = True
                 break
         if not dominated:
@@ -929,7 +974,7 @@ def _build_entry_from_proximity(
     col_range = range(carrier.col, carrier.col + carrier.cols)
 
     # Also check rows below the carrier (common pattern)
-    row_range = range(carrier.row, min(carrier.row + 10, layer["end_row"] + 1))
+    row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer["end_row"] + 1))
 
     participation = None
     premium = None
@@ -981,7 +1026,7 @@ def _build_entry_from_proximity(
             # For non-column-aligned blocks, require same row and close proximity
             if abs(block.row - carrier.row) > 1:
                 continue
-            if abs(block.col - carrier.col) > 3:  # Must be within 3 columns
+            if abs(block.col - carrier.col) > MAX_COLUMN_DISTANCE:
                 continue
 
         if block.field_type in ("percentage", "percentage_or_number") and participation is None:
@@ -1119,7 +1164,7 @@ def _normalize_percentage(value) -> float:
         return None
 
     # If > 1, assume it's a whole number percentage
-    if value > 1:
+    if value > PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
         return value / 100
 
     return float(value)
