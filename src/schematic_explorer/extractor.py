@@ -857,6 +857,28 @@ def _extract_layer_data(
     return entries
 
 
+def _filter_label_blocks(
+    blocks: list[Block],
+    row_start: int,
+    row_end: int,
+    col_min: int | None = None,
+    col_max: int | None = None,
+) -> list[Block]:
+    """Filter blocks to label blocks within row/column bounds."""
+    result = []
+    for block in blocks:
+        if block.row < row_start or block.row > row_end:
+            continue
+        if block.field_type != "label":
+            continue
+        if col_min is not None and block.col < col_min:
+            continue
+        if col_max is not None and block.col > col_max:
+            continue
+        result.append(block)
+    return result
+
+
 def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
     """Find column header positions for Premium, Limit, Rate, TIV, etc.
 
@@ -869,45 +891,32 @@ def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
     # First pass: look in rows near or above the layer start (traditional layout)
     search_start = max(1, layer["start_row"] - 5)
     search_end = layer["start_row"] + 3
-
-    for block in blocks:
-        if block.row < search_start or block.row > search_end:
-            continue
-        if block.field_type != "label":
-            continue
-
+    header_blocks = _filter_label_blocks(blocks, search_start, search_end)
+    for block in header_blocks:
         val_lower = str(block.value).lower().strip()
         _classify_column_header(val_lower, block.col, headers)
 
     # Second pass: look for sub-headers within the layer (for complex schematics)
     # Look for specific headers that appear mid-layer as data table column headers
     # These are typically in columns beyond A/B (which contain row labels)
-    for block in blocks:
-        if block.row < layer["start_row"] or block.row > layer["end_row"]:
-            continue
-        if block.field_type != "label":
-            continue
-        if block.col <= 2:  # Skip row labels in columns A/B
-            continue
-
+    layer_blocks = _filter_label_blocks(blocks, layer["start_row"], layer["end_row"], col_min=3)
+    for block in layer_blocks:
         val_lower = str(block.value).lower().strip()
-
-        # Detect Rate headers
-        if val_lower == "rate" and "rate_col" not in headers:
-            headers["rate_col"] = block.col
-
-        # Detect PREMIUM column header (uppercase "PREMIUM" is often a column header)
-        # This takes precedence over row labels like "Share Premium"
-        elif val_lower == "premium" and block.col > 2:
-            headers["premium_col"] = block.col
-
-        # TIV detection
-        elif ("tiv" in val_lower or val_lower == "updated tiv") and "tiv_col" not in headers:
-            headers["tiv_col"] = block.col
-            if "tiv_data_col" not in headers:
-                headers["tiv_data_col"] = block.col + 1
+        _classify_sub_header(val_lower, block.col, headers)
 
     return headers
+
+
+def _classify_sub_header(val_lower: str, col: int, headers: dict):
+    """Classify a sub-header within a layer."""
+    if val_lower == "rate" and "rate_col" not in headers:
+        headers["rate_col"] = col
+    elif val_lower == "premium" and col > 2:
+        headers["premium_col"] = col
+    elif ("tiv" in val_lower or val_lower == "updated tiv") and "tiv_col" not in headers:
+        headers["tiv_col"] = col
+        if "tiv_data_col" not in headers:
+            headers["tiv_data_col"] = col + 1
 
 
 def _classify_column_header(val_lower: str, col: int, headers: dict):
@@ -947,26 +956,16 @@ def _find_row_labels(ws, blocks: list[Block], layer: dict) -> dict:
     end_row = layer["end_row"]
 
     # First pass: look for labels in columns A or B (traditional layout)
-    for block in blocks:
-        if block.row < start_row or block.row > end_row:
-            continue
-        if block.col > 2:
-            continue
-        if block.field_type != "label":
-            continue
-
+    ab_blocks = _filter_label_blocks(blocks, start_row, end_row, col_max=2)
+    for block in ab_blocks:
         val_lower = str(block.value).lower().strip()
         _classify_row_label(val_lower, block.row, labels)
 
     # Second pass: if we didn't find key labels, look in any column
     # (for schematics where labels repeat per carrier column)
     if "premium_row" not in labels or "participation_row" not in labels:
-        for block in blocks:
-            if block.row < start_row or block.row > end_row:
-                continue
-            if block.field_type != "label":
-                continue
-
+        all_blocks = _filter_label_blocks(blocks, start_row, end_row)
+        for block in all_blocks:
             val_lower = str(block.value).lower().strip()
             _classify_row_label(val_lower, block.row, labels)
 
