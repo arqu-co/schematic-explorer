@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 
 const outputDir = path.resolve(__dirname, '../output')
+const inputDir = path.resolve(__dirname, '../input')
 
 export default defineConfig({
   plugins: [
@@ -22,6 +23,35 @@ export default defineConfig({
           } catch (err) {
             res.statusCode = 500
             res.end(JSON.stringify({ error: 'Failed to read output directory' }))
+          }
+        })
+
+        // API endpoint: serve input files (Excel)
+        server.middlewares.use('/api/input/', (req, res, next) => {
+          const url = req.url || ''
+          const fileName = decodeURIComponent(url.slice(1))
+
+          if (!fileName) {
+            next()
+            return
+          }
+
+          const filePath = path.join(inputDir, fileName)
+
+          // Security check
+          if (!filePath.startsWith(inputDir)) {
+            res.statusCode = 403
+            res.end('Forbidden')
+            return
+          }
+
+          try {
+            const content = fs.readFileSync(filePath)
+            res.setHeader('Content-Type', 'application/octet-stream')
+            res.end(content)
+          } catch {
+            res.statusCode = 404
+            res.end('Not found: ' + fileName)
           }
         })
 

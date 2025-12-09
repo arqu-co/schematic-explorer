@@ -448,34 +448,33 @@ function App() {
 
           <Box className="main-content">
             {selectedFile && (
-              <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-                <Tabs.List>
-                  <Tabs.Trigger value="tower">Tower View</Tabs.Trigger>
-                  <Tabs.Trigger value="table">Table View</Tabs.Trigger>
-                  <Tabs.Trigger value="json">Raw JSON</Tabs.Trigger>
-                  <Tabs.Trigger value="excel">Excel</Tabs.Trigger>
-                </Tabs.List>
+              <>
+                <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+                  <Tabs.List>
+                    <Tabs.Trigger value="tower">Tower View</Tabs.Trigger>
+                    <Tabs.Trigger value="table">Table View</Tabs.Trigger>
+                    <Tabs.Trigger value="json">Raw JSON</Tabs.Trigger>
+                    <Tabs.Trigger value="excel">Excel</Tabs.Trigger>
+                  </Tabs.List>
+                </Tabs.Root>
 
-                <Box pt="3">
-                  <Tabs.Content value="tower">
+                <div className="tab-scroll-container">
+                  {activeTab === 'tower' && (
                     <TowerVisualization layers={layers} onCellClick={handleCellClick} />
-                  </Tabs.Content>
-
-                  <Tabs.Content value="table">
+                  )}
+                  {activeTab === 'table' && (
                     <CarrierTable entries={selectedFile.entries} />
-                  </Tabs.Content>
-
-                  <Tabs.Content value="json">
+                  )}
+                  {activeTab === 'json' && (
                     <pre className="json-content">
                       {JSON.stringify(selectedFile.entries, null, 2)}
                     </pre>
-                  </Tabs.Content>
-
-                  <Tabs.Content value="excel">
+                  )}
+                  {activeTab === 'excel' && (
                     <ExcelViewer stem={selectedFile.stem} highlightRange={highlightEntry?.excel_range ?? null} />
-                  </Tabs.Content>
-                </Box>
-              </Tabs.Root>
+                  )}
+                </div>
+              </>
             )}
           </Box>
 
