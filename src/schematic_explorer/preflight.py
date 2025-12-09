@@ -14,9 +14,7 @@ Example:
 
 from dataclasses import dataclass
 
-import openpyxl
-
-from .extractor import _classify_blocks, _find_all_blocks, _identify_layers
+from .extractor import _classify_blocks, _find_all_blocks, _identify_layers, _load_workbook
 
 
 @dataclass
@@ -67,6 +65,10 @@ def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
     Returns:
         PreflightResult containing analysis results and recommendations.
 
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is invalid or sheet name not found
+
     Example:
         >>> result = preflight("tower.xlsx")
         >>> print(f"Can extract: {result.can_extract}")
@@ -78,12 +80,7 @@ def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
     """
     from pathlib import Path
 
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-
-    if sheet_name:
-        ws = wb[sheet_name]
-    else:
-        ws = wb.active
+    ws = _load_workbook(filepath, sheet_name)
 
     # Find and classify all blocks
     blocks = _find_all_blocks(ws)

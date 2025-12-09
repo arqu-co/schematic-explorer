@@ -1297,6 +1297,45 @@ def _parse_currency(value) -> float:
     return None
 
 
+def _load_workbook(filepath: str, sheet_name: str | None = None):
+    """Load workbook and return worksheet, with proper error handling.
+
+    Args:
+        filepath: Path to Excel file
+        sheet_name: Optional sheet name
+
+    Returns:
+        Worksheet object
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If sheet name is invalid or file format is unsupported
+    """
+    from pathlib import Path
+
+    import openpyxl
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+
+    if path.suffix.lower() not in (".xlsx", ".xlsm", ".xltx", ".xltm"):
+        raise ValueError(f"Unsupported file format: {path.suffix}. Expected .xlsx, .xlsm, .xltx, or .xltm")
+
+    try:
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+    except InvalidFileException as e:
+        raise ValueError(f"Invalid or corrupted Excel file: {filepath}") from e
+
+    if sheet_name:
+        if sheet_name not in wb.sheetnames:
+            available = ", ".join(wb.sheetnames)
+            raise ValueError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
+        return wb[sheet_name]
+    return wb.active
+
+
 def extract_schematic(filepath: str, sheet_name: str | None = None) -> list[dict]:
     """Extract insurance tower schematic data from an Excel file.
 
@@ -1319,21 +1358,17 @@ def extract_schematic(filepath: str, sheet_name: str | None = None) -> list[dict
         - fill_color: Cell background color if any
         - attachment_point: Parsed from "xs." notation
 
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is invalid or sheet name not found
+
     Example:
         >>> from schematic_explorer import extract_schematic
         >>> entries = extract_schematic("tower.xlsx")
         >>> for entry in entries:
         ...     print(f"{entry['carrier']}: {entry['participation_pct']}")
     """
-    import openpyxl
-
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-
-    if sheet_name:
-        ws = wb[sheet_name]
-    else:
-        ws = wb.active
-
+    ws = _load_workbook(filepath, sheet_name)
     entries, _ = extract_adaptive(ws)
     return [entry.to_dict() for entry in entries]
 
@@ -1349,11 +1384,11 @@ def extract_schematic_with_summaries(
 
     Returns:
         Tuple of (carrier_entries, layer_summaries)
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is invalid or sheet name not found
     """
-    import openpyxl
-
-    wb = openpyxl.load_workbook(filepath, data_only=True)
-    ws = wb[sheet_name] if sheet_name else wb.active
-
+    ws = _load_workbook(filepath, sheet_name)
     entries, summaries = extract_adaptive(ws)
     return ([entry.to_dict() for entry in entries], [summary.to_dict() for summary in summaries])
