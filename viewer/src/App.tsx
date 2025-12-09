@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Theme, Container, Flex, Heading, Text, Card, Badge, Box, Tabs, ScrollArea, Table, Tooltip, Code } from '@radix-ui/themes';
 import '@radix-ui/themes/styles.css';
-import { CarrierEntry, SchematicFile, Layer } from './types';
+import type { CarrierEntry, SchematicFile, Layer } from './types';
 import './App.css';
 
 function parseLimit(limit: string): number {
