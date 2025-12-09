@@ -4,7 +4,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -25,26 +24,23 @@ OUTPUT_DIR = Path(__file__).parent.parent.parent.parent / "output"
 VERIFICATION_SCHEMA = {
     "type": "object",
     "properties": {
-        "score": {
-            "type": "number",
-            "description": "Accuracy score from 0.0 to 1.0"
-        },
+        "score": {"type": "number", "description": "Accuracy score from 0.0 to 1.0"},
         "summary": {
             "type": "string",
-            "description": "Brief 1-2 sentence summary of extraction quality"
+            "description": "Brief 1-2 sentence summary of extraction quality",
         },
         "issues": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "List of specific issues found"
+            "description": "List of specific issues found",
         },
         "suggestions": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "List of improvement suggestions"
-        }
+            "description": "List of improvement suggestions",
+        },
     },
-    "required": ["score", "summary", "issues", "suggestions"]
+    "required": ["score", "summary", "issues", "suggestions"],
 }
 
 SNAPSHOT_VERIFICATION_SCHEMA = {
@@ -52,29 +48,26 @@ SNAPSHOT_VERIFICATION_SCHEMA = {
     "properties": {
         "score": {
             "type": "number",
-            "description": "Accuracy score from 0.0 to 1.0 based on visual comparison"
+            "description": "Accuracy score from 0.0 to 1.0 based on visual comparison",
         },
-        "summary": {
-            "type": "string",
-            "description": "Brief assessment based on visual comparison"
-        },
+        "summary": {"type": "string", "description": "Brief assessment based on visual comparison"},
         "visual_issues": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Discrepancies between image and extracted data"
+            "description": "Discrepancies between image and extracted data",
         },
         "missing_from_extraction": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Data visible in image but not in extraction"
+            "description": "Data visible in image but not in extraction",
         },
         "false_positives": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Data in extraction that doesn't appear in image"
-        }
+            "description": "Data in extraction that doesn't appear in image",
+        },
     },
-    "required": ["score", "summary", "visual_issues", "missing_from_extraction", "false_positives"]
+    "required": ["score", "summary", "visual_issues", "missing_from_extraction", "false_positives"],
 }
 
 # Schema for cross-validation pass
@@ -83,34 +76,41 @@ CROSS_VALIDATION_SCHEMA = {
     "properties": {
         "adjusted_score": {
             "type": "number",
-            "description": "Revised accuracy score from 0.0 to 1.0 after reviewing issues"
+            "description": "Revised accuracy score from 0.0 to 1.0 after reviewing issues",
         },
         "summary": {
             "type": "string",
-            "description": "Brief summary of the cross-validation findings"
+            "description": "Brief summary of the cross-validation findings",
         },
         "confirmed_issues": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Issues from the first pass that are confirmed as real problems"
+            "description": "Issues from the first pass that are confirmed as real problems",
         },
         "dismissed_issues": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Issues from the first pass that were false positives (with brief reason)"
+            "description": "Issues from the first pass that were false positives (with brief reason)",
         },
         "new_issues": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Any additional issues discovered during cross-validation"
+            "description": "Any additional issues discovered during cross-validation",
         },
         "suggestions": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Refined suggestions for improving extraction"
-        }
+            "description": "Refined suggestions for improving extraction",
+        },
     },
-    "required": ["adjusted_score", "summary", "confirmed_issues", "dismissed_issues", "new_issues", "suggestions"]
+    "required": [
+        "adjusted_score",
+        "summary",
+        "confirmed_issues",
+        "dismissed_issues",
+        "new_issues",
+        "suggestions",
+    ],
 }
 
 
@@ -135,7 +135,7 @@ GENERATION_CONFIG = {
 }
 
 
-def _excel_to_text(filepath: str, sheet_name: Optional[str] = None) -> str:
+def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
     """Convert Excel file to text representation for Gemini."""
     import openpyxl
     from openpyxl.utils import get_column_letter
@@ -156,7 +156,7 @@ def _excel_to_text(filepath: str, sheet_name: Optional[str] = None) -> str:
         for col in range(1, ws.max_column + 1):
             val = ws.cell(row=row, column=col).value
             if val is not None:
-                val_str = str(val).replace('\n', ' | ')  # Preserve newlines as pipes
+                val_str = str(val).replace("\n", " | ")  # Preserve newlines as pipes
                 row_cells.append(f"{get_column_letter(col)}{row}={val_str}")
         if row_cells:
             lines.append(f"Row {row}: {' | '.join(row_cells)}")
@@ -165,7 +165,7 @@ def _excel_to_text(filepath: str, sheet_name: Optional[str] = None) -> str:
     if ws.merged_cells.ranges:
         lines.append("")
         lines.append(f"Merged cells: {len(list(ws.merged_cells.ranges))}")
-        for i, mr in enumerate(list(ws.merged_cells.ranges)[:20]):
+        for mr in list(ws.merged_cells.ranges)[:20]:
             lines.append(f"  {mr}")
 
     return "\n".join(lines)
@@ -351,7 +351,7 @@ For EACH issue:
 Be AGGRESSIVE about dismissing false positives. When in doubt, DISMISS."""
 
 
-def _get_snapshot_path(filepath: str) -> Optional[Path]:
+def _get_snapshot_path(filepath: str) -> Path | None:
     """Get the snapshot image path for an Excel file."""
     excel_path = Path(filepath)
     snapshot_path = OUTPUT_DIR / f"{excel_path.stem}.png"
@@ -383,18 +383,18 @@ def _parse_json_response(raw_response: str) -> dict:
 
     # Try to fix common escape issues
     # Replace problematic backslashes that aren't valid escapes
-    text_fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', text)
+    text_fixed = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", text)
     try:
         return json.loads(text_fixed)
     except json.JSONDecodeError:
         pass
 
     # Try to extract just the JSON object
-    match = re.search(r'\{[\s\S]*\}', text)
+    match = re.search(r"\{[\s\S]*\}", text)
     if match:
         json_str = match.group()
         # Fix escapes in extracted JSON
-        json_str = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_str)
+        json_str = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", json_str)
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
@@ -409,16 +409,14 @@ def _parse_json_response(raw_response: str) -> dict:
             "score": float(score_match.group(1)),
             "summary": summary_match.group(1) if summary_match else "Partial parse",
             "issues": [],
-            "suggestions": []
+            "suggestions": [],
         }
 
     raise ValueError("Could not parse JSON response")
 
 
 def verify_extraction(
-    filepath: str,
-    entries: list[CarrierEntry],
-    sheet_name: Optional[str] = None
+    filepath: str, entries: list[CarrierEntry], sheet_name: str | None = None
 ) -> VerificationResult:
     """
     Verify extracted data against original Excel using Gemini with structured output.
@@ -450,24 +448,16 @@ def verify_extraction(
         if snapshot_path:
             # Use multimodal verification with image
             prompt = VERIFICATION_PROMPT.format(
-                excel_content=excel_content,
-                extracted_content=extracted_content
+                excel_content=excel_content, extracted_content=extracted_content
             )
             image = Image.open(snapshot_path)
-            response = model.generate_content(
-                [prompt, image],
-                generation_config=generation_config
-            )
+            response = model.generate_content([prompt, image], generation_config=generation_config)
         else:
             # Fall back to text-only verification
             prompt = VERIFICATION_PROMPT_TEXT_ONLY.format(
-                excel_content=excel_content,
-                extracted_content=extracted_content
+                excel_content=excel_content, extracted_content=extracted_content
             )
-            response = model.generate_content(
-                prompt,
-                generation_config=generation_config
-            )
+            response = model.generate_content(prompt, generation_config=generation_config)
 
         raw_response = response.text
 
@@ -481,26 +471,23 @@ def verify_extraction(
             issues=data.get("issues", []),
             suggestions=data.get("suggestions", []),
             raw_response=raw_response,
-            metadata={"parsing_method": "structured", "fallback_used": False}
+            metadata={"parsing_method": "structured", "fallback_used": False},
         )
     except Exception as e:
         # Fallback to legacy parsing if structured output fails
         logger.warning(
-            "verify_extraction: structured output failed (%s), using fallback parser",
-            str(e)
+            "verify_extraction: structured output failed (%s), using fallback parser", str(e)
         )
         try:
             if snapshot_path:
                 prompt = VERIFICATION_PROMPT.format(
-                    excel_content=excel_content,
-                    extracted_content=extracted_content
+                    excel_content=excel_content, extracted_content=extracted_content
                 )
                 image = Image.open(snapshot_path)
                 response = model.generate_content([prompt, image])
             else:
                 prompt = VERIFICATION_PROMPT_TEXT_ONLY.format(
-                    excel_content=excel_content,
-                    extracted_content=extracted_content
+                    excel_content=excel_content, extracted_content=extracted_content
                 )
                 response = model.generate_content(prompt)
 
@@ -514,27 +501,33 @@ def verify_extraction(
                 issues=data.get("issues", []),
                 suggestions=data.get("suggestions", []),
                 raw_response=raw_response,
-                metadata={"parsing_method": "fallback", "fallback_used": True, "structured_error": str(e)}
+                metadata={
+                    "parsing_method": "fallback",
+                    "fallback_used": True,
+                    "structured_error": str(e),
+                },
             )
         except Exception as fallback_error:
-            logger.error(
-                "verify_extraction: fallback parser also failed (%s)",
-                str(fallback_error)
-            )
+            logger.error("verify_extraction: fallback parser also failed (%s)", str(fallback_error))
             return VerificationResult(
                 score=0.0,
                 summary=f"Verification failed: {e}",
                 issues=[str(e)],
                 suggestions=[],
                 raw_response=str(e),
-                metadata={"parsing_method": "error", "fallback_used": True, "structured_error": str(e), "fallback_error": str(fallback_error)}
+                metadata={
+                    "parsing_method": "error",
+                    "fallback_used": True,
+                    "structured_error": str(e),
+                    "fallback_error": str(fallback_error),
+                },
             )
 
 
 def verify_snapshot(
     filepath: str,
     entries: list[CarrierEntry],
-) -> Optional[VerificationResult]:
+) -> VerificationResult | None:
     """
     Verify extracted data against the visual snapshot only using structured output.
 
@@ -552,9 +545,7 @@ def verify_snapshot(
     model = _get_client()
     extracted_content = _entries_to_text(entries)
 
-    prompt = SNAPSHOT_VERIFICATION_PROMPT.format(
-        extracted_content=extracted_content
-    )
+    prompt = SNAPSHOT_VERIFICATION_PROMPT.format(extracted_content=extracted_content)
 
     # Configure structured output with temperature=0 for consistency
     generation_config = {
@@ -565,10 +556,7 @@ def verify_snapshot(
 
     try:
         image = Image.open(snapshot_path)
-        response = model.generate_content(
-            [prompt, image],
-            generation_config=generation_config
-        )
+        response = model.generate_content([prompt, image], generation_config=generation_config)
         raw_response = response.text
 
         # Parse structured response
@@ -586,13 +574,12 @@ def verify_snapshot(
             issues=issues,
             suggestions=[],
             raw_response=raw_response,
-            metadata={"parsing_method": "structured", "fallback_used": False}
+            metadata={"parsing_method": "structured", "fallback_used": False},
         )
     except Exception as e:
         # Fallback to legacy parsing
         logger.warning(
-            "verify_snapshot: structured output failed (%s), using fallback parser",
-            str(e)
+            "verify_snapshot: structured output failed (%s), using fallback parser", str(e)
         )
         try:
             image = Image.open(snapshot_path)
@@ -611,20 +598,26 @@ def verify_snapshot(
                 issues=issues,
                 suggestions=[],
                 raw_response=raw_response,
-                metadata={"parsing_method": "fallback", "fallback_used": True, "structured_error": str(e)}
+                metadata={
+                    "parsing_method": "fallback",
+                    "fallback_used": True,
+                    "structured_error": str(e),
+                },
             )
         except Exception as fallback_error:
-            logger.error(
-                "verify_snapshot: fallback parser also failed (%s)",
-                str(fallback_error)
-            )
+            logger.error("verify_snapshot: fallback parser also failed (%s)", str(fallback_error))
             return VerificationResult(
                 score=0.0,
                 summary=f"Snapshot verification failed: {e}",
                 issues=[str(e)],
                 suggestions=[],
                 raw_response=str(e),
-                metadata={"parsing_method": "error", "fallback_used": True, "structured_error": str(e), "fallback_error": str(fallback_error)}
+                metadata={
+                    "parsing_method": "error",
+                    "fallback_used": True,
+                    "structured_error": str(e),
+                    "fallback_error": str(fallback_error),
+                },
             )
 
 
@@ -632,7 +625,7 @@ def cross_validate(
     filepath: str,
     entries: list[CarrierEntry],
     initial_result: VerificationResult,
-    sheet_name: Optional[str] = None
+    sheet_name: str | None = None,
 ) -> VerificationResult:
     """
     Cross-validate the first-pass verification to filter false positives.
@@ -656,8 +649,16 @@ def cross_validate(
     extracted_content = _entries_to_text(entries)
 
     # Format issues and suggestions for the prompt
-    issues_list = "\n".join(f"- {issue}" for issue in initial_result.issues) if initial_result.issues else "None identified"
-    suggestions_list = "\n".join(f"- {s}" for s in initial_result.suggestions) if initial_result.suggestions else "None"
+    issues_list = (
+        "\n".join(f"- {issue}" for issue in initial_result.issues)
+        if initial_result.issues
+        else "None identified"
+    )
+    suggestions_list = (
+        "\n".join(f"- {s}" for s in initial_result.suggestions)
+        if initial_result.suggestions
+        else "None"
+    )
 
     prompt = CROSS_VALIDATION_PROMPT.format(
         excel_content=excel_content,
@@ -665,7 +666,7 @@ def cross_validate(
         initial_score=initial_result.score,
         initial_summary=initial_result.summary,
         issues_list=issues_list,
-        suggestions_list=suggestions_list
+        suggestions_list=suggestions_list,
     )
 
     generation_config = {
@@ -676,10 +677,7 @@ def cross_validate(
 
     try:
         image = Image.open(snapshot_path)
-        response = model.generate_content(
-            [prompt, image],
-            generation_config=generation_config
-        )
+        response = model.generate_content([prompt, image], generation_config=generation_config)
         raw_response = response.text
         data = json.loads(raw_response)
 
@@ -698,7 +696,7 @@ def cross_validate(
             summary=summary,
             issues=all_issues,
             suggestions=data.get("suggestions", []),
-            raw_response=f"INITIAL:\n{initial_result.raw_response}\n\nCROSS-VALIDATION:\n{raw_response}"
+            raw_response=f"INITIAL:\n{initial_result.raw_response}\n\nCROSS-VALIDATION:\n{raw_response}",
         )
     except Exception as e:
         # If cross-validation fails, return initial result
@@ -707,14 +705,12 @@ def cross_validate(
             summary=f"{initial_result.summary} (cross-validation failed: {e})",
             issues=initial_result.issues,
             suggestions=initial_result.suggestions,
-            raw_response=initial_result.raw_response
+            raw_response=initial_result.raw_response,
         )
 
 
 def cross_check_layer_totals(
-    entries: list[CarrierEntry],
-    layer_summaries: list[LayerSummary],
-    result: VerificationResult
+    entries: list[CarrierEntry], layer_summaries: list[LayerSummary], result: VerificationResult
 ) -> VerificationResult:
     """
     Cross-check extracted carrier premiums against layer summary totals.
@@ -797,11 +793,11 @@ def cross_check_layer_totals(
         summary=result.summary,
         issues=issues,
         suggestions=suggestions,
-        raw_response=result.raw_response
+        raw_response=result.raw_response,
     )
 
 
-def verify_file(filepath: str, sheet_name: Optional[str] = None) -> VerificationResult:
+def verify_file(filepath: str, sheet_name: str | None = None) -> VerificationResult:
     """
     Extract and verify a single file using two-pass cross-validation.
 
@@ -825,7 +821,7 @@ def verify_file(filepath: str, sheet_name: Optional[str] = None) -> Verification
             summary="No data extracted from file",
             issues=["Extraction returned empty results"],
             suggestions=["Check if file format is supported"],
-            raw_response=""
+            raw_response="",
         )
 
     # Pass 1: Initial verification (text + image if available)

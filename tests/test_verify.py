@@ -15,7 +15,6 @@ from openpyxl import Workbook
 
 from schematic_explorer.types import CarrierEntry, LayerSummary, VerificationResult
 
-
 # ============================================================================
 # Mock setup - must happen before importing verify module
 # ============================================================================
@@ -33,31 +32,31 @@ mock_dotenv = MagicMock()
 mock_dotenv.load_dotenv = MagicMock()
 
 # Patch sys.modules before importing verify
-sys.modules['google'] = MagicMock()
-sys.modules['google.generativeai'] = mock_genai
-sys.modules['PIL'] = mock_pil
-sys.modules['PIL.Image'] = mock_pil.Image
-sys.modules['dotenv'] = mock_dotenv
+sys.modules["google"] = MagicMock()
+sys.modules["google.generativeai"] = mock_genai
+sys.modules["PIL"] = mock_pil
+sys.modules["PIL.Image"] = mock_pil.Image
+sys.modules["dotenv"] = mock_dotenv
 
 # Now we can import verify
 import schematic_explorer.verify as verify_module
 from schematic_explorer.verify import (
-    _parse_json_response,
-    _excel_to_text,
     _entries_to_text,
-    _get_snapshot_path,
+    _excel_to_text,
     _get_client,
-    verify_extraction,
-    verify_snapshot,
-    cross_validate,
+    _get_snapshot_path,
+    _parse_json_response,
     cross_check_layer_totals,
+    cross_validate,
+    verify_extraction,
     verify_file,
+    verify_snapshot,
 )
-
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def sample_entries():
@@ -160,6 +159,7 @@ def excel_file_with_merged_cells():
 # Tests for _parse_json_response
 # ============================================================================
 
+
 class TestParseJsonResponse:
     """Tests for _parse_json_response function."""
 
@@ -224,6 +224,7 @@ class TestParseJsonResponse:
 # Tests for _excel_to_text
 # ============================================================================
 
+
 class TestExcelToText:
     """Tests for _excel_to_text function."""
 
@@ -261,6 +262,7 @@ class TestExcelToText:
 # ============================================================================
 # Tests for _entries_to_text
 # ============================================================================
+
 
 class TestEntriesToText:
     """Tests for _entries_to_text function."""
@@ -349,6 +351,7 @@ class TestEntriesToText:
 # Tests for _get_snapshot_path
 # ============================================================================
 
+
 class TestGetSnapshotPath:
     """Tests for _get_snapshot_path function."""
 
@@ -360,7 +363,7 @@ class TestGetSnapshotPath:
     def test_returns_path_when_snapshot_exists(self, tmp_path):
         """Test that path is returned when snapshot exists."""
         # Create a mock output directory structure
-        with patch.object(verify_module, 'OUTPUT_DIR', tmp_path):
+        with patch.object(verify_module, "OUTPUT_DIR", tmp_path):
             snapshot = tmp_path / "test.png"
             snapshot.write_bytes(b"fake png")
             result = _get_snapshot_path("/some/path/test.xlsx")
@@ -371,12 +374,13 @@ class TestGetSnapshotPath:
 # Tests for _get_client
 # ============================================================================
 
+
 class TestGetClient:
     """Tests for _get_client function."""
 
     def test_raises_without_api_key(self):
         """Test that ValueError is raised without API key."""
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValueError, match="GEMINI_API_KEY not found"):
                 _get_client()
 
@@ -385,35 +389,38 @@ class TestGetClient:
         mock_genai_local = MagicMock()
         mock_genai_local.GenerativeModel.return_value = MagicMock()
 
-        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test-key'}):
-            with patch.object(verify_module, 'genai', mock_genai_local):
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
+            with patch.object(verify_module, "genai", mock_genai_local):
                 _get_client()
-                mock_genai_local.configure.assert_called_once_with(api_key='test-key')
+                mock_genai_local.configure.assert_called_once_with(api_key="test-key")
 
     def test_uses_custom_model_id(self):
         """Test that custom model ID is used when specified."""
         mock_genai_local = MagicMock()
         mock_genai_local.GenerativeModel.return_value = MagicMock()
 
-        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test-key', 'GEMINI_MODEL_ID': 'custom-model'}):
-            with patch.object(verify_module, 'genai', mock_genai_local):
+        with patch.dict(
+            "os.environ", {"GEMINI_API_KEY": "test-key", "GEMINI_MODEL_ID": "custom-model"}
+        ):
+            with patch.object(verify_module, "genai", mock_genai_local):
                 _get_client()
-                mock_genai_local.GenerativeModel.assert_called_once_with('custom-model')
+                mock_genai_local.GenerativeModel.assert_called_once_with("custom-model")
 
     def test_uses_default_model(self):
         """Test that default model is used when not specified."""
         mock_genai_local = MagicMock()
         mock_genai_local.GenerativeModel.return_value = MagicMock()
 
-        with patch.dict('os.environ', {'GEMINI_API_KEY': 'test-key'}, clear=True):
-            with patch.object(verify_module, 'genai', mock_genai_local):
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}, clear=True):
+            with patch.object(verify_module, "genai", mock_genai_local):
                 _get_client()
-                mock_genai_local.GenerativeModel.assert_called_once_with('gemini-2.5-flash')
+                mock_genai_local.GenerativeModel.assert_called_once_with("gemini-2.5-flash")
 
 
 # ============================================================================
 # Tests for verify_extraction
 # ============================================================================
+
 
 class TestVerifyExtraction:
     """Tests for verify_extraction function."""
@@ -421,18 +428,15 @@ class TestVerifyExtraction:
     def test_successful_verification(self, excel_file, sample_entries):
         """Test successful verification with mocked Gemini."""
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.95,
-            "summary": "Extraction is accurate",
-            "issues": [],
-            "suggestions": []
-        })
+        mock_response.text = json.dumps(
+            {"score": 0.95, "summary": "Extraction is accurate", "issues": [], "suggestions": []}
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.95
@@ -446,18 +450,20 @@ class TestVerifyExtraction:
     def test_verification_with_issues(self, excel_file, sample_entries):
         """Test verification that finds issues."""
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.7,
-            "summary": "Some issues found",
-            "issues": ["Missing carrier X", "Wrong percentage for Y"],
-            "suggestions": ["Review layer 2"]
-        })
+        mock_response.text = json.dumps(
+            {
+                "score": 0.7,
+                "summary": "Some issues found",
+                "issues": ["Missing carrier X", "Wrong percentage for Y"],
+                "suggestions": ["Review layer 2"],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.7
@@ -469,8 +475,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = Exception("API Error")
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.0
@@ -488,21 +494,23 @@ class TestVerifyExtraction:
         snapshot.write_bytes(b"fake png data")
 
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.9,
-            "summary": "Visual verification complete",
-            "issues": [],
-            "suggestions": []
-        })
+        mock_response.text = json.dumps(
+            {
+                "score": 0.9,
+                "summary": "Visual verification complete",
+                "issues": [],
+                "suggestions": [],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = verify_extraction(excel_file, sample_entries)
 
                     assert result.score == 0.9
@@ -521,16 +529,18 @@ class TestVerifyExtraction:
         mock_response_bad.text = "not json"
 
         mock_response_good = MagicMock()
-        mock_response_good.text = '{"score": 0.85, "summary": "Fallback worked", "issues": [], "suggestions": []}'
+        mock_response_good.text = (
+            '{"score": 0.85, "summary": "Fallback worked", "issues": [], "suggestions": []}'
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = [mock_response_bad, mock_response_good]
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = verify_extraction(excel_file, sample_entries)
 
                     # Should use fallback result
@@ -554,8 +564,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = [mock_response_bad, mock_response_good]
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.8
@@ -565,12 +575,13 @@ class TestVerifyExtraction:
 # Tests for verify_snapshot
 # ============================================================================
 
+
 class TestVerifySnapshot:
     """Tests for verify_snapshot function."""
 
     def test_returns_none_without_snapshot(self, sample_entries):
         """Test that None is returned without snapshot."""
-        with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_snapshot_path", return_value=None):
             result = verify_snapshot("/test.xlsx", sample_entries)
             assert result is None
 
@@ -580,22 +591,24 @@ class TestVerifySnapshot:
         snapshot.write_bytes(b"fake png data")
 
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.85,
-            "summary": "Visual check complete",
-            "visual_issues": ["Alignment issue"],
-            "missing_from_extraction": ["Carrier X"],
-            "false_positives": []
-        })
+        mock_response.text = json.dumps(
+            {
+                "score": 0.85,
+                "summary": "Visual check complete",
+                "visual_issues": ["Alignment issue"],
+                "missing_from_extraction": ["Carrier X"],
+                "false_positives": [],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result is not None
@@ -613,9 +626,9 @@ class TestVerifySnapshot:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result.score == 0.0
@@ -631,22 +644,24 @@ class TestVerifySnapshot:
         mock_response_bad.text = "not valid json"
 
         mock_response_good = MagicMock()
-        mock_response_good.text = json.dumps({
-            "score": 0.75,
-            "summary": "Fallback OK",
-            "visual_issues": ["Issue A"],
-            "missing_from_extraction": ["Missing B"],
-            "false_positives": ["FP C"]
-        })
+        mock_response_good.text = json.dumps(
+            {
+                "score": 0.75,
+                "summary": "Fallback OK",
+                "visual_issues": ["Issue A"],
+                "missing_from_extraction": ["Missing B"],
+                "false_positives": ["FP C"],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = [mock_response_bad, mock_response_good]
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result.score == 0.75
@@ -659,6 +674,7 @@ class TestVerifySnapshot:
 # Tests for cross_validate
 # ============================================================================
 
+
 class TestCrossValidate:
     """Tests for cross_validate function."""
 
@@ -669,10 +685,10 @@ class TestCrossValidate:
             summary="Initial result",
             issues=["Issue 1"],
             suggestions=[],
-            raw_response="raw"
+            raw_response="raw",
         )
 
-        with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_snapshot_path", return_value=None):
             result = cross_validate(excel_file, sample_entries, initial)
             assert result == initial
 
@@ -686,27 +702,29 @@ class TestCrossValidate:
             summary="Initial",
             issues=["False positive issue", "Real issue"],
             suggestions=[],
-            raw_response="raw"
+            raw_response="raw",
         )
 
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "adjusted_score": 0.9,
-            "summary": "Refined after review",
-            "confirmed_issues": ["Real issue"],
-            "dismissed_issues": ["False positive issue - wrong column"],
-            "new_issues": [],
-            "suggestions": ["Review carefully"]
-        })
+        mock_response.text = json.dumps(
+            {
+                "adjusted_score": 0.9,
+                "summary": "Refined after review",
+                "confirmed_issues": ["Real issue"],
+                "dismissed_issues": ["False positive issue - wrong column"],
+                "new_issues": [],
+                "suggestions": ["Review carefully"],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = cross_validate(excel_file, sample_entries, initial)
 
                     assert result.score == 0.9
@@ -720,11 +738,7 @@ class TestCrossValidate:
         snapshot.write_bytes(b"fake png data")
 
         initial = VerificationResult(
-            score=0.7,
-            summary="Initial",
-            issues=["Issue 1"],
-            suggestions=[],
-            raw_response="raw"
+            score=0.7, summary="Initial", issues=["Issue 1"], suggestions=[], raw_response="raw"
         )
 
         mock_model = MagicMock()
@@ -732,9 +746,9 @@ class TestCrossValidate:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                with patch.object(verify_module.Image, "open", return_value=mock_image):
                     result = cross_validate(excel_file, sample_entries, initial)
 
                     assert result.score == 0.7
@@ -745,17 +759,14 @@ class TestCrossValidate:
 # Tests for cross_check_layer_totals
 # ============================================================================
 
+
 class TestCrossCheckLayerTotals:
     """Tests for cross_check_layer_totals function."""
 
     def test_no_discrepancies(self, sample_entries, sample_layer_summaries):
         """Test when carrier totals match layer summaries."""
         initial = VerificationResult(
-            score=0.95,
-            summary="Good extraction",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.95, summary="Good extraction", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(sample_entries, sample_layer_summaries, initial)
@@ -776,11 +787,7 @@ class TestCrossCheckLayerTotals:
         ]
 
         initial = VerificationResult(
-            score=0.9,
-            summary="Extraction complete",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.9, summary="Extraction complete", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(entries, summaries, initial)
@@ -814,11 +821,7 @@ class TestCrossCheckLayerTotals:
         ]
 
         initial = VerificationResult(
-            score=0.9,
-            summary="Extraction complete",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.9, summary="Extraction complete", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(entries, summaries, initial)
@@ -852,11 +855,7 @@ class TestCrossCheckLayerTotals:
         ]
 
         initial = VerificationResult(
-            score=0.9,
-            summary="Extraction complete",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.9, summary="Extraction complete", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(entries, summaries, initial)
@@ -890,11 +889,7 @@ class TestCrossCheckLayerTotals:
         ]
 
         initial = VerificationResult(
-            score=0.9,
-            summary="Extraction complete",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.9, summary="Extraction complete", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(entries, summaries, initial)
@@ -915,11 +910,7 @@ class TestCrossCheckLayerTotals:
         ]
 
         initial = VerificationResult(
-            score=0.9,
-            summary="Extraction complete",
-            issues=[],
-            suggestions=[],
-            raw_response="raw"
+            score=0.9, summary="Extraction complete", issues=[], suggestions=[], raw_response="raw"
         )
 
         result = cross_check_layer_totals(entries, summaries, initial)
@@ -932,13 +923,16 @@ class TestCrossCheckLayerTotals:
 # Tests for verify_file
 # ============================================================================
 
+
 class TestVerifyFile:
     """Tests for verify_file function."""
 
     def test_empty_extraction(self, excel_file):
         """Test handling of empty extraction results."""
         # extract_schematic_with_summaries is imported from .extractor inside verify_file
-        with patch('schematic_explorer.extractor.extract_schematic_with_summaries', return_value=([], [])):
+        with patch(
+            "schematic_explorer.extractor.extract_schematic_with_summaries", return_value=([], [])
+        ):
             result = verify_file(excel_file)
 
             assert result.score == 0.0
@@ -947,60 +941,67 @@ class TestVerifyFile:
     def test_full_pipeline(self, excel_file, sample_entries, sample_layer_summaries):
         """Test full verification pipeline."""
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.95,
-            "summary": "Good extraction",
-            "issues": [],
-            "suggestions": []
-        })
+        mock_response.text = json.dumps(
+            {"score": 0.95, "summary": "Good extraction", "issues": [], "suggestions": []}
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch('schematic_explorer.extractor.extract_schematic_with_summaries',
-                   return_value=(sample_entries, sample_layer_summaries)):
-            with patch.object(verify_module, '_get_client', return_value=mock_model):
-                with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch(
+            "schematic_explorer.extractor.extract_schematic_with_summaries",
+            return_value=(sample_entries, sample_layer_summaries),
+        ):
+            with patch.object(verify_module, "_get_client", return_value=mock_model):
+                with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                     result = verify_file(excel_file)
 
                     assert result.score == 0.95
                     assert "Good extraction" in result.summary
 
-    def test_pipeline_with_cross_validation(self, excel_file, sample_entries, sample_layer_summaries, tmp_path):
+    def test_pipeline_with_cross_validation(
+        self, excel_file, sample_entries, sample_layer_summaries, tmp_path
+    ):
         """Test full pipeline including cross-validation."""
         snapshot = tmp_path / "test.png"
         snapshot.write_bytes(b"fake png data")
 
         # Initial response
         initial_response = MagicMock()
-        initial_response.text = json.dumps({
-            "score": 0.8,
-            "summary": "Initial check",
-            "issues": ["Possible issue"],
-            "suggestions": []
-        })
+        initial_response.text = json.dumps(
+            {
+                "score": 0.8,
+                "summary": "Initial check",
+                "issues": ["Possible issue"],
+                "suggestions": [],
+            }
+        )
 
         # Cross-validation response
         cross_response = MagicMock()
-        cross_response.text = json.dumps({
-            "adjusted_score": 0.95,
-            "summary": "Cross-validated",
-            "confirmed_issues": [],
-            "dismissed_issues": ["Possible issue - false positive"],
-            "new_issues": [],
-            "suggestions": []
-        })
+        cross_response.text = json.dumps(
+            {
+                "adjusted_score": 0.95,
+                "summary": "Cross-validated",
+                "confirmed_issues": [],
+                "dismissed_issues": ["Possible issue - false positive"],
+                "new_issues": [],
+                "suggestions": [],
+            }
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = [initial_response, cross_response]
 
         mock_image = MagicMock()
 
-        with patch('schematic_explorer.extractor.extract_schematic_with_summaries',
-                   return_value=(sample_entries, sample_layer_summaries)):
-            with patch.object(verify_module, '_get_client', return_value=mock_model):
-                with patch.object(verify_module, '_get_snapshot_path', return_value=snapshot):
-                    with patch.object(verify_module.Image, 'open', return_value=mock_image):
+        with patch(
+            "schematic_explorer.extractor.extract_schematic_with_summaries",
+            return_value=(sample_entries, sample_layer_summaries),
+        ):
+            with patch.object(verify_module, "_get_client", return_value=mock_model):
+                with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
+                    with patch.object(verify_module.Image, "open", return_value=mock_image):
                         result = verify_file(excel_file)
 
                         # Should get cross-validated score
@@ -1011,6 +1012,7 @@ class TestVerifyFile:
 # Tests for lazy imports in __init__.py
 # ============================================================================
 
+
 class TestLazyImports:
     """Tests for lazy imports in __init__.py."""
 
@@ -1018,7 +1020,9 @@ class TestLazyImports:
         """Test that verify_file is lazily imported."""
         from schematic_explorer import verify_file as vf
 
-        with patch('schematic_explorer.extractor.extract_schematic_with_summaries', return_value=([], [])):
+        with patch(
+            "schematic_explorer.extractor.extract_schematic_with_summaries", return_value=([], [])
+        ):
             result = vf(excel_file)
             assert result.score == 0.0
 
@@ -1027,18 +1031,15 @@ class TestLazyImports:
         from schematic_explorer import verify_extraction as ve
 
         mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "score": 0.9,
-            "summary": "OK",
-            "issues": [],
-            "suggestions": []
-        })
+        mock_response.text = json.dumps(
+            {"score": 0.9, "summary": "OK", "issues": [], "suggestions": []}
+        )
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, '_get_client', return_value=mock_model):
-            with patch.object(verify_module, '_get_snapshot_path', return_value=None):
+        with patch.object(verify_module, "_get_client", return_value=mock_model):
+            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
                 result = ve(excel_file, sample_entries)
                 assert result.score == 0.9
 
@@ -1046,6 +1047,7 @@ class TestLazyImports:
 # ============================================================================
 # Tests for VERIFICATION_SCHEMA constants
 # ============================================================================
+
 
 class TestSchemas:
     """Tests for schema constants."""
