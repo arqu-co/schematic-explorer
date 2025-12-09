@@ -485,6 +485,11 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
         if b.col > 2:
             continue
 
+        # Filter out aggregate totals - numbers > $1B are almost never layer limits
+        # They're typically year-over-year totals or summary figures at the bottom of schematics
+        if isinstance(b.value, (int, float)) and b.value > 1_000_000_000:
+            continue
+
         # For large_number type, be more selective - only if it looks like a layer limit
         if b.field_type == 'large_number':
             # Check if there's a label nearby that indicates this is NOT a layer limit
@@ -496,6 +501,20 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
                     # "LIMIT" in column A means per-carrier limits, not layer limit
                     # "Premium" or "Policy" means this row has data, not layer definitions
                     if 'premium' in val_lower or val_lower == 'limit' or 'policy' in val_lower:
+                        skip_block = True
+                        break
+                # Also check for year patterns - "2019 Bound", "2018 Marketing" etc.
+                # These indicate summary/historical rows, not layer definitions
+                if other.row == b.row:
+                    val_str = str(other.value)
+                    if re.match(r'^20\d{2}\b', val_str):  # Starts with year like 2019, 2018
+                        skip_block = True
+                        break
+                # Check the row ABOVE - if it contains "Premium" or "Share Premium" labels,
+                # this row contains premium data, not layer limits
+                if other.field_type == 'label' and other.row == b.row - 1:
+                    val_lower = str(other.value).lower()
+                    if 'premium' in val_lower or 'participation' in val_lower:
                         skip_block = True
                         break
             if skip_block:
@@ -524,11 +543,6 @@ def _identify_layers(blocks: list[Block], ws) -> list[dict]:
     layers = []
     for i, block in enumerate(primary_limits):
         limit_str = _format_limit(block.value)
-
-        # Filter out TIV (very large numbers in first few rows)
-        if block.field_type == 'large_number' and block.row <= 5:
-            if isinstance(block.value, (int, float)) and block.value > 1_000_000_000:
-                continue
 
         # Determine end row
         if i + 1 < len(primary_limits):
