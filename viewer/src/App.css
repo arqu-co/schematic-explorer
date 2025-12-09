@@ -1,0 +1,74 @@
+#root {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.tower-viz {
+  display: flex;
+  flex-direction: column;
+}
+
+.tower-layer {
+  background: var(--color-panel);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
+  border: 1px solid var(--gray-6);
+}
+
+.layer-header {
+  margin-bottom: var(--space-2);
+}
+
+.layer-carriers {
+  min-height: 50px;
+}
+
+.carrier-block {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--gray-7);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.carrier-block:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.carrier-name {
+  max-width: 150px;
+}
+
+.schematic-card {
+  transition: border-color 0.15s;
+}
+
+.schematic-card.selected {
+  border-color: var(--accent-9);
+  background: var(--accent-2);
+}
+
+.schematic-card:hover:not(.selected) {
+  border-color: var(--gray-8);
+}
+
+.insights-content {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  font-family: var(--code-font-family);
+  color: var(--gray-11);
+  margin: 0;
+}
+
+.json-content {
+  font-size: 11px;
+  line-height: 1.4;
+  font-family: var(--code-font-family);
+  color: var(--gray-11);
+  margin: 0;
+}

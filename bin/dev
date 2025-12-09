@@ -1,77 +1,37 @@
-#!/usr/bin/env python3
-"""
-Start a development server to view tower extraction outputs.
+#!/bin/bash
+#
+# Start the Schematic Explorer development server.
+#
+# Usage:
+#     bin/dev              # Start server on default port (5173)
+#     bin/dev --no-open    # Start without opening browser
+#
 
-Usage:
-    bin/dev              # Start server on port 8000
-    bin/dev 3000         # Start server on port 3000
-"""
+set -e
 
-import argparse
-import http.server
-import os
-import socketserver
-import sys
-import webbrowser
-from pathlib import Path
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VIEWER_DIR="$PROJECT_ROOT/viewer"
+OUTPUT_DIR="$PROJECT_ROOT/output"
 
-PROJECT_ROOT = Path(__file__).parent.parent
-OUTPUT_DIR = PROJECT_ROOT / "output"
+# Check if output directory exists with JSON files
+if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A "$OUTPUT_DIR"/*.json 2>/dev/null)" ]; then
+    echo "No JSON files found in output/"
+    echo "Run 'bin/process all' first to generate outputs."
+    exit 1
+fi
 
+# Check if node_modules exists
+if [ ! -d "$VIEWER_DIR/node_modules" ]; then
+    echo "Installing viewer dependencies..."
+    cd "$VIEWER_DIR" && npm install
+fi
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    """Custom handler that serves from output directory."""
+echo ""
+echo "📊 Schematic Explorer"
+echo "========================================"
+echo ""
+echo "Starting development server..."
+echo ""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(OUTPUT_DIR), **kwargs)
-
-    def log_message(self, format, *args):
-        """Custom log format."""
-        print(f"  {args[0]}")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Start development server")
-    parser.add_argument("port", nargs="?", type=int, default=8000, help="Port to serve on")
-    parser.add_argument("--no-open", action="store_true", help="Don't open browser")
-    args = parser.parse_args()
-
-    if not OUTPUT_DIR.exists():
-        print(f"Output directory not found: {OUTPUT_DIR}")
-        print("Run 'bin/process all' first to generate outputs.")
-        return 1
-
-    # List available HTML files
-    html_files = sorted(OUTPUT_DIR.glob("*.html"))
-    if not html_files:
-        print("No HTML files found in output/")
-        print("Run 'bin/process all' first to generate outputs.")
-        return 1
-
-    print(f"\n📊 Tower Extraction Viewer")
-    print(f"{'='*40}")
-    print(f"\nServing from: {OUTPUT_DIR}")
-    print(f"\nAvailable files:")
-    for f in html_files:
-        print(f"  • http://localhost:{args.port}/{f.name}")
-
-    print(f"\n{'='*40}")
-    print(f"Server running at http://localhost:{args.port}")
-    print("Press Ctrl+C to stop\n")
-
-    # Open browser to first file
-    if not args.no_open and html_files:
-        url = f"http://localhost:{args.port}/{html_files[0].name}"
-        webbrowser.open(url)
-
-    # Start server
-    with socketserver.TCPServer(("", args.port), Handler) as httpd:
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\n\nServer stopped.")
-            return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main() or 0)
+cd "$VIEWER_DIR"
+npm run dev -- --open
