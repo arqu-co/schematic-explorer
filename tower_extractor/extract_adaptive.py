@@ -906,20 +906,28 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
                 # Use row labels to distinguish Premium from % Premium
                 # Note: row_labels stores the LABEL row, data is often in the NEXT row
                 # So we check both the label row and the row after it
+                #
+                # IMPORTANT: "% Premium" (or "Share Premium") is the carrier's share
+                # "Premium" alone is often the total layer premium
+                # For CarrierEntry, we want the carrier's share, so prefer % Premium
 
-                # First check for % Premium row (if it exists)
+                # First check for % Premium / Share Premium row (carrier's share)
                 if percent_premium_row:
                     if block.row == percent_premium_row or block.row == percent_premium_row + 1:
-                        # This is % Premium row or data row below it
-                        if premium_share is None:
-                            premium_share = val
+                        # This is the carrier's share premium - use as main premium
+                        if premium is None:
+                            premium = val
                         continue
 
-                # Then check for Premium row (if it exists)
+                # Then check for Premium row (layer total) - only use if no % Premium row
                 if premium_row:
                     if block.row == premium_row or block.row == premium_row + 1:
-                        # This is the Premium row or data row below it
-                        if premium is None:
+                        # If we have % Premium row, this is layer total - store separately
+                        # If no % Premium row, this IS the carrier premium
+                        if percent_premium_row:
+                            # Store as layer_premium (not used for CarrierEntry)
+                            pass  # Skip layer totals
+                        elif premium is None:
                             premium = val
                         continue
 
