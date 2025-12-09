@@ -433,6 +433,68 @@ def _parse_json_response(raw_response: str) -> dict:
     raise ValueError("Could not parse JSON response")
 
 
+def _make_gemini_request(
+    model,
+    prompt: str,
+    schema: dict,
+    image: Image.Image | None = None,
+    context: str = "request",
+) -> tuple[dict, str, dict]:
+    """Make a Gemini request with structured output and fallback parsing.
+
+    Args:
+        model: Gemini model instance
+        prompt: The prompt text
+        schema: JSON schema for structured output
+        image: Optional PIL Image for multimodal requests
+        context: Context string for logging (e.g., "verify_extraction")
+
+    Returns:
+        Tuple of (parsed_data, raw_response, metadata)
+
+    Raises:
+        Exception: If both structured output and fallback parsing fail
+    """
+    generation_config = {
+        "temperature": GENERATION_TEMPERATURE,
+        "response_mime_type": "application/json",
+        "response_schema": schema,
+    }
+
+    content = [prompt, image] if image else prompt
+    structured_error_msg = None
+
+    # Try structured output first
+    try:
+        response = model.generate_content(content, generation_config=generation_config)
+        raw_response = response.text
+        data = json.loads(raw_response)
+        logger.info("%s: structured output parsed successfully", context)
+        return data, raw_response, {"parsing_method": "structured", "fallback_used": False}
+    except Exception as e:
+        structured_error_msg = str(e)
+        logger.warning(
+            "%s: structured output failed (%s), using fallback parser", context, structured_error_msg
+        )
+
+    # Fallback: try without schema enforcement
+    try:
+        response = model.generate_content(content if image else prompt)
+        raw_response = response.text
+        data = _parse_json_response(raw_response)
+        logger.info("%s: fallback parser succeeded", context)
+        return data, raw_response, {
+            "parsing_method": "fallback",
+            "fallback_used": True,
+            "structured_error": structured_error_msg,
+        }
+    except Exception as fallback_error:
+        logger.error("%s: fallback parser also failed (%s)", context, str(fallback_error))
+        raise Exception(
+            f"Both structured output and fallback parsing failed: {structured_error_msg}, {fallback_error}"
+        ) from fallback_error
+
+
 def verify_extraction(
     filepath: str, entries: list[CarrierEntry], sheet_name: str | None = None
 ) -> VerificationResult:
@@ -455,91 +517,47 @@ def verify_extraction(
     # Check if we have a snapshot image
     snapshot_path = _get_snapshot_path(filepath)
 
-    # Configure structured output with temperature=0 for consistency
-    generation_config = {
-        "temperature": GENERATION_TEMPERATURE,
-        "response_mime_type": "application/json",
-        "response_schema": VERIFICATION_SCHEMA,
-    }
+    # Build prompt based on whether we have an image
+    if snapshot_path:
+        prompt = VERIFICATION_PROMPT.format(
+            excel_content=excel_content, extracted_content=extracted_content
+        )
+        image = Image.open(snapshot_path)
+    else:
+        prompt = VERIFICATION_PROMPT_TEXT_ONLY.format(
+            excel_content=excel_content, extracted_content=extracted_content
+        )
+        image = None
 
     try:
-        if snapshot_path:
-            # Use multimodal verification with image
-            prompt = VERIFICATION_PROMPT.format(
-                excel_content=excel_content, extracted_content=extracted_content
-            )
-            image = Image.open(snapshot_path)
-            response = model.generate_content([prompt, image], generation_config=generation_config)
-        else:
-            # Fall back to text-only verification
-            prompt = VERIFICATION_PROMPT_TEXT_ONLY.format(
-                excel_content=excel_content, extracted_content=extracted_content
-            )
-            response = model.generate_content(prompt, generation_config=generation_config)
-
-        raw_response = response.text
-
-        # Parse structured response
-        data = json.loads(raw_response)
-
-        logger.info("verify_extraction: structured output parsed successfully")
+        data, raw_response, metadata = _make_gemini_request(
+            model, prompt, VERIFICATION_SCHEMA, image, "verify_extraction"
+        )
         return VerificationResult(
             score=float(data.get("score", 0)),
             summary=data.get("summary", "No summary"),
             issues=data.get("issues", []),
             suggestions=data.get("suggestions", []),
             raw_response=raw_response,
-            metadata={"parsing_method": "structured", "fallback_used": False},
+            metadata=metadata,
         )
     except Exception as e:
-        # Fallback to legacy parsing if structured output fails
-        logger.warning(
-            "verify_extraction: structured output failed (%s), using fallback parser", str(e)
+        return VerificationResult(
+            score=0.0,
+            summary=f"Verification failed: {e}",
+            issues=[str(e)],
+            suggestions=[],
+            raw_response=str(e),
+            metadata={"parsing_method": "error", "fallback_used": True, "error": str(e)},
         )
-        try:
-            if snapshot_path:
-                prompt = VERIFICATION_PROMPT.format(
-                    excel_content=excel_content, extracted_content=extracted_content
-                )
-                image = Image.open(snapshot_path)
-                response = model.generate_content([prompt, image])
-            else:
-                prompt = VERIFICATION_PROMPT_TEXT_ONLY.format(
-                    excel_content=excel_content, extracted_content=extracted_content
-                )
-                response = model.generate_content(prompt)
 
-            raw_response = response.text
-            data = _parse_json_response(raw_response)
 
-            logger.info("verify_extraction: fallback parser succeeded")
-            return VerificationResult(
-                score=float(data.get("score", 0)),
-                summary=data.get("summary", "No summary provided"),
-                issues=data.get("issues", []),
-                suggestions=data.get("suggestions", []),
-                raw_response=raw_response,
-                metadata={
-                    "parsing_method": "fallback",
-                    "fallback_used": True,
-                    "structured_error": str(e),
-                },
-            )
-        except Exception as fallback_error:
-            logger.error("verify_extraction: fallback parser also failed (%s)", str(fallback_error))
-            return VerificationResult(
-                score=0.0,
-                summary=f"Verification failed: {e}",
-                issues=[str(e)],
-                suggestions=[],
-                raw_response=str(e),
-                metadata={
-                    "parsing_method": "error",
-                    "fallback_used": True,
-                    "structured_error": str(e),
-                    "fallback_error": str(fallback_error),
-                },
-            )
+def _convert_snapshot_issues(data: dict) -> list[str]:
+    """Convert snapshot-specific fields to standard issue format."""
+    issues = list(data.get("visual_issues", []))
+    issues.extend([f"Missing: {m}" for m in data.get("missing_from_extraction", [])])
+    issues.extend([f"False positive: {f}" for f in data.get("false_positives", [])])
+    return issues
 
 
 def verify_snapshot(
@@ -562,81 +580,31 @@ def verify_snapshot(
 
     model = _get_client()
     extracted_content = _entries_to_text(entries)
-
     prompt = SNAPSHOT_VERIFICATION_PROMPT.format(extracted_content=extracted_content)
-
-    # Configure structured output with temperature=0 for consistency
-    generation_config = {
-        "temperature": GENERATION_TEMPERATURE,
-        "response_mime_type": "application/json",
-        "response_schema": SNAPSHOT_VERIFICATION_SCHEMA,
-    }
+    image = Image.open(snapshot_path)
 
     try:
-        image = Image.open(snapshot_path)
-        response = model.generate_content([prompt, image], generation_config=generation_config)
-        raw_response = response.text
-
-        # Parse structured response
-        data = json.loads(raw_response)
-
-        # Convert snapshot-specific fields to standard format
-        issues = list(data.get("visual_issues", []))
-        issues.extend([f"Missing: {m}" for m in data.get("missing_from_extraction", [])])
-        issues.extend([f"False positive: {f}" for f in data.get("false_positives", [])])
-
-        logger.info("verify_snapshot: structured output parsed successfully")
+        data, raw_response, metadata = _make_gemini_request(
+            model, prompt, SNAPSHOT_VERIFICATION_SCHEMA, image, "verify_snapshot"
+        )
+        issues = _convert_snapshot_issues(data)
         return VerificationResult(
             score=float(data.get("score", 0)),
             summary=data.get("summary", "Visual verification complete"),
             issues=issues,
             suggestions=[],
             raw_response=raw_response,
-            metadata={"parsing_method": "structured", "fallback_used": False},
+            metadata=metadata,
         )
     except Exception as e:
-        # Fallback to legacy parsing
-        logger.warning(
-            "verify_snapshot: structured output failed (%s), using fallback parser", str(e)
+        return VerificationResult(
+            score=0.0,
+            summary=f"Snapshot verification failed: {e}",
+            issues=[str(e)],
+            suggestions=[],
+            raw_response=str(e),
+            metadata={"parsing_method": "error", "fallback_used": True, "error": str(e)},
         )
-        try:
-            image = Image.open(snapshot_path)
-            response = model.generate_content([prompt, image])
-            raw_response = response.text
-            data = _parse_json_response(raw_response)
-
-            issues = data.get("visual_issues", [])
-            issues.extend([f"Missing: {m}" for m in data.get("missing_from_extraction", [])])
-            issues.extend([f"False positive: {f}" for f in data.get("false_positives", [])])
-
-            logger.info("verify_snapshot: fallback parser succeeded")
-            return VerificationResult(
-                score=float(data.get("score", 0)),
-                summary=data.get("summary", "Visual verification complete"),
-                issues=issues,
-                suggestions=[],
-                raw_response=raw_response,
-                metadata={
-                    "parsing_method": "fallback",
-                    "fallback_used": True,
-                    "structured_error": str(e),
-                },
-            )
-        except Exception as fallback_error:
-            logger.error("verify_snapshot: fallback parser also failed (%s)", str(fallback_error))
-            return VerificationResult(
-                score=0.0,
-                summary=f"Snapshot verification failed: {e}",
-                issues=[str(e)],
-                suggestions=[],
-                raw_response=str(e),
-                metadata={
-                    "parsing_method": "error",
-                    "fallback_used": True,
-                    "structured_error": str(e),
-                    "fallback_error": str(fallback_error),
-                },
-            )
 
 
 def cross_validate(

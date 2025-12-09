@@ -485,8 +485,7 @@ class TestVerifyExtraction:
                 assert result.metadata is not None
                 assert result.metadata["parsing_method"] == "error"
                 assert result.metadata["fallback_used"] is True
-                assert "structured_error" in result.metadata
-                assert "fallback_error" in result.metadata
+                assert "error" in result.metadata
 
     def test_verification_with_snapshot(self, excel_file, sample_entries, tmp_path):
         """Test verification with snapshot image."""
