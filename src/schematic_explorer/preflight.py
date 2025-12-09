@@ -13,11 +13,10 @@ Example:
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import openpyxl
 
-from .extractor import Block, _find_all_blocks, _classify_blocks, _identify_layers
+from .extractor import _classify_blocks, _find_all_blocks, _identify_layers
 
 
 @dataclass
@@ -37,6 +36,7 @@ class PreflightResult:
         issues: List of detected issues that may affect extraction
         suggestions: List of suggestions for improving extraction results
     """
+
     file_name: str
     sheet_name: str
     can_extract: bool
@@ -50,10 +50,7 @@ class PreflightResult:
     suggestions: list[str]
 
 
-def preflight(
-    filepath: str,
-    sheet_name: Optional[str] = None
-) -> PreflightResult:
+def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
     """Run preflight analysis on an Excel file to assess extraction viability.
 
     This function analyzes the structure of an Excel file to determine:
@@ -102,21 +99,21 @@ def preflight(
     # Count block types
     type_counts = {}
     for block in blocks:
-        t = block.field_type or 'unknown'
+        t = block.field_type or "unknown"
         type_counts[t] = type_counts.get(t, 0) + 1
 
     # Check for carriers
-    carriers = [b for b in blocks if b.field_type == 'carrier']
+    carriers = [b for b in blocks if b.field_type == "carrier"]
     high_conf_carriers = [b for b in carriers if b.confidence >= 0.7]
 
     # Check for percentages
-    percentages = [b for b in blocks if b.field_type in ('percentage', 'percentage_or_number')]
+    percentages = [b for b in blocks if b.field_type in ("percentage", "percentage_or_number")]
 
     # Check for currency
-    currency = [b for b in blocks if b.field_type in ('currency', 'currency_string')]
+    currency = [b for b in blocks if b.field_type in ("currency", "currency_string")]
 
     # Check for terms
-    terms = [b for b in blocks if b.field_type == 'terms']
+    terms = [b for b in blocks if b.field_type == "terms"]
 
     # Assess issues
     if not layers:
@@ -127,12 +124,18 @@ def preflight(
         issues.append("No carrier names detected")
         suggestions.append("Carrier names should be text cells with company-like names")
     elif len(high_conf_carriers) < len(carriers) * 0.5:
-        issues.append(f"Low confidence on carrier detection ({len(high_conf_carriers)}/{len(carriers)} high confidence)")
-        suggestions.append("Carrier names with 'Insurance', 'Inc', 'Lloyd's' etc. are detected with higher confidence")
+        issues.append(
+            f"Low confidence on carrier detection ({len(high_conf_carriers)}/{len(carriers)} high confidence)"
+        )
+        suggestions.append(
+            "Carrier names with 'Insurance', 'Inc', 'Lloyd's' etc. are detected with higher confidence"
+        )
 
     if not percentages:
         issues.append("No participation percentages detected")
-        suggestions.append("Percentages should be decimal (0.25) or whole numbers (25) or strings ('25%')")
+        suggestions.append(
+            "Percentages should be decimal (0.25) or whole numbers (25) or strings ('25%')"
+        )
 
     if not currency:
         issues.append("No premium/currency values detected")
@@ -140,25 +143,19 @@ def preflight(
 
     # Calculate confidence score
     confidence = 0.0
-    weights = {
-        'layers': 0.3,
-        'carriers': 0.3,
-        'percentages': 0.2,
-        'currency': 0.1,
-        'terms': 0.1
-    }
+    weights = {"layers": 0.3, "carriers": 0.3, "percentages": 0.2, "currency": 0.1, "terms": 0.1}
 
     if layers:
-        confidence += weights['layers']
+        confidence += weights["layers"]
     if carriers:
         avg_carrier_conf = sum(c.confidence for c in carriers) / len(carriers)
-        confidence += weights['carriers'] * avg_carrier_conf
+        confidence += weights["carriers"] * avg_carrier_conf
     if percentages:
-        confidence += weights['percentages']
+        confidence += weights["percentages"]
     if currency:
-        confidence += weights['currency']
+        confidence += weights["currency"]
     if terms:
-        confidence += weights['terms']
+        confidence += weights["terms"]
 
     can_extract = len(layers) > 0 and len(carriers) > 0
 
@@ -173,5 +170,5 @@ def preflight(
         has_currency=len(currency) > 0,
         has_terms=len(terms) > 0,
         issues=issues,
-        suggestions=suggestions
+        suggestions=suggestions,
     )

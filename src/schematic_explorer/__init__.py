@@ -17,7 +17,7 @@ Preflight check:
 """
 
 from .extractor import extract_schematic, extract_schematic_with_summaries
-from .preflight import preflight, PreflightResult
+from .preflight import PreflightResult, preflight
 from .types import CarrierEntry, LayerSummary, VerificationResult
 
 __version__ = "0.1.0"

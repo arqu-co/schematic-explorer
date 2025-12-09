@@ -1,10 +1,9 @@
 """Utility functions for Excel cell operations."""
 
-from typing import Optional
 from openpyxl.utils import range_boundaries
 
 
-def find_merged_range_at(ws, row: int, col: int) -> Optional[str]:
+def find_merged_range_at(ws, row: int, col: int) -> str | None:
     """Find if a cell is part of a merged range, return the range string."""
     for merged_range in ws.merged_cells.ranges:
         min_col, min_row, max_col, max_row = range_boundaries(str(merged_range))
@@ -22,7 +21,7 @@ def get_cell_value(ws, row: int, col: int):
     return ws.cell(row=row, column=col).value
 
 
-def get_cell_color(ws, row: int, col: int) -> Optional[str]:
+def get_cell_color(ws, row: int, col: int) -> str | None:
     """Get background color of a cell as hex string."""
     merged = find_merged_range_at(ws, row, col)
     if merged:
@@ -33,6 +32,6 @@ def get_cell_color(ws, row: int, col: int) -> Optional[str]:
 
     if cell.fill and cell.fill.fgColor:
         color = cell.fill.fgColor
-        if color.type == 'rgb' and color.rgb and color.rgb not in ('00000000', '000000'):
+        if color.type == "rgb" and color.rgb and color.rgb not in ("00000000", "000000"):
             return color.rgb
     return None
