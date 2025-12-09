@@ -576,31 +576,32 @@ def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
         _classify_column_header(val_lower, block.col, headers)
 
     # Second pass: look for sub-headers within the layer (for complex schematics)
-    # Only look for specific exclusion headers (Rate, TIV) that appear mid-layer
-    # BUT only if these headers indicate a dedicated data section, not row labels
+    # Look for specific headers that appear mid-layer as data table column headers
+    # These are typically in columns beyond A/B (which contain row labels)
     for block in blocks:
         if block.row < layer['start_row'] or block.row > layer['end_row']:
             continue
         if block.field_type != 'label':
             continue
+        if block.col <= 2:  # Skip row labels in columns A/B
+            continue
 
         val_lower = str(block.value).lower().strip()
 
-        # Only detect Rate headers when they appear as column headers (not row labels)
-        # Row labels like "Rate" in column A/B should be ignored
-        if val_lower == 'rate' and 'rate_col' not in headers and block.col > 2:
+        # Detect Rate headers
+        if val_lower == 'rate' and 'rate_col' not in headers:
             headers['rate_col'] = block.col
 
-        # TIV detection - only when paired with column-style data layout
-        # Avoid detecting "TIV BY YEAR" row labels in column A/B as excluding the entire column
-        # TIV exclusion columns are typically when "TIV" appears as a column header (col > 2)
-        # or when there's a clear "TIV" label paired with adjacent data columns
+        # Detect PREMIUM column header (uppercase "PREMIUM" is often a column header)
+        # This takes precedence over row labels like "Share Premium"
+        elif val_lower == 'premium' and block.col > 2:
+            headers['premium_col'] = block.col
+
+        # TIV detection
         elif ('tiv' in val_lower or val_lower == 'updated tiv') and 'tiv_col' not in headers:
-            # Only mark as TIV column if it's not in the first 2 columns (row label columns)
-            if block.col > 2:
-                headers['tiv_col'] = block.col
-                if 'tiv_data_col' not in headers:
-                    headers['tiv_data_col'] = block.col + 1
+            headers['tiv_col'] = block.col
+            if 'tiv_data_col' not in headers:
+                headers['tiv_data_col'] = block.col + 1
 
     return headers
 
@@ -823,7 +824,16 @@ def _build_entry_from_proximity(ws, carrier: Block, data_blocks: list[Block],
                         premium = val
                     continue
 
-                # Fallback to column-based logic
+                # If we have a premium_col column header, only accept values from that column
+                if premium_col and block.col == premium_col:
+                    if premium is None:
+                        premium = val
+                    continue
+                elif premium_col:
+                    # We have a premium_col but this block isn't in it - skip
+                    continue
+
+                # Fallback to column-based logic (no explicit premium_col detected)
                 if premium_share_col and block.col == premium_share_col:
                     if premium_share is None:
                         premium_share = val
