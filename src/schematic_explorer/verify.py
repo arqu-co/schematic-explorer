@@ -11,6 +11,25 @@ from PIL import Image
 
 from .types import CarrierEntry, LayerSummary, VerificationResult
 
+# =============================================================================
+# Configuration Constants
+# =============================================================================
+
+# Default model for verification (flash-lite has thinking OFF, so use flash)
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+
+# Generation temperature (0 for deterministic output)
+GENERATION_TEMPERATURE = 0
+
+# Cross-check thresholds
+LAYER_MISSING_PREMIUM_THRESHOLD = 10000  # Flag if layer shows > $10K but no carriers
+LAYER_DISCREPANCY_THRESHOLD = 2.0  # Flag if > 200% difference between carrier sum and layer total
+MAX_LAYER_PENALTY = 0.15  # Maximum score reduction for layer discrepancies
+PENALTY_PER_DISCREPANCY = 0.05  # Score penalty per discrepancy found
+
+# Merged cell display limit (in Excel-to-text conversion)
+MAX_MERGED_CELLS_DISPLAY = 20
+
 # Library logging follows best practice: NullHandler by default
 # CLI tools/users can configure logging to see output
 logger = logging.getLogger(__name__)
@@ -118,8 +137,7 @@ def _get_client():
     """Initialize Gemini client."""
     load_dotenv()
     api_key = os.getenv("GEMINI_API_KEY")
-    # Default to gemini-2.5-flash for better reasoning (flash-lite has thinking OFF)
-    model_id = os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash")
+    model_id = os.getenv("GEMINI_MODEL_ID", DEFAULT_GEMINI_MODEL)
 
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found in environment")
@@ -130,7 +148,7 @@ def _get_client():
 
 # Generation config with temperature=0 for deterministic, consistent output
 GENERATION_CONFIG = {
-    "temperature": 0,
+    "temperature": GENERATION_TEMPERATURE,
     "response_mime_type": "application/json",
 }
 
@@ -165,7 +183,7 @@ def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
     if ws.merged_cells.ranges:
         lines.append("")
         lines.append(f"Merged cells: {len(list(ws.merged_cells.ranges))}")
-        for mr in list(ws.merged_cells.ranges)[:20]:
+        for mr in list(ws.merged_cells.ranges)[:MAX_MERGED_CELLS_DISPLAY]:
             lines.append(f"  {mr}")
 
     return "\n".join(lines)
@@ -439,7 +457,7 @@ def verify_extraction(
 
     # Configure structured output with temperature=0 for consistency
     generation_config = {
-        "temperature": 0,
+        "temperature": GENERATION_TEMPERATURE,
         "response_mime_type": "application/json",
         "response_schema": VERIFICATION_SCHEMA,
     }
@@ -549,7 +567,7 @@ def verify_snapshot(
 
     # Configure structured output with temperature=0 for consistency
     generation_config = {
-        "temperature": 0,
+        "temperature": GENERATION_TEMPERATURE,
         "response_mime_type": "application/json",
         "response_schema": SNAPSHOT_VERIFICATION_SCHEMA,
     }
@@ -670,7 +688,7 @@ def cross_validate(
     )
 
     generation_config = {
-        "temperature": 0,
+        "temperature": GENERATION_TEMPERATURE,
         "response_mime_type": "application/json",
         "response_schema": CROSS_VALIDATION_SCHEMA,
     }
@@ -762,14 +780,14 @@ def cross_check_layer_totals(
         # Only flag extreme discrepancies (> 200% or completely missing carriers)
 
         # Case 1: Layer has no carriers but should have data (likely extraction issue)
-        if actual == 0 and expected > 10000:
+        if actual == 0 and expected > LAYER_MISSING_PREMIUM_THRESHOLD:
             discrepancies_found += 1
             issues.append(
                 f"Layer {layer_limit}: No carrier premiums extracted but "
                 f"summary shows ${expected:,.0f} (cell {summary.excel_range}) - possible extraction gap"
             )
         # Case 2: Extreme discrepancy (>3x difference) - likely data error
-        elif discrepancy_pct > 2.0:
+        elif discrepancy_pct > LAYER_DISCREPANCY_THRESHOLD:
             discrepancies_found += 1
             issues.append(
                 f"Layer {layer_limit}: Carrier premiums ${actual:,.0f} vs "
@@ -781,7 +799,7 @@ def cross_check_layer_totals(
     score = result.score
     if discrepancies_found > 0:
         # Mild penalty - summary mismatches may just be year differences
-        penalty = min(0.05 * discrepancies_found, 0.15)  # Max 15% penalty
+        penalty = min(PENALTY_PER_DISCREPANCY * discrepancies_found, MAX_LAYER_PENALTY)
         score = max(0.0, score - penalty)
         suggestions.append(
             f"Review {discrepancies_found} layer(s) with significant carrier/summary differences "
