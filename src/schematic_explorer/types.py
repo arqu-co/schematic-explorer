@@ -159,11 +159,28 @@ class CarrierConfig:
         all_non_carriers = structural_labels | brokers_wholesalers
 
         # Build alias lookup map (normalized alias -> canonical)
+        # Must apply same normalization as CarrierMatcher.normalize()
         alias_to_canonical: dict[str, str] = {}
         for entity in entities:
             for alias in entity.aliases:
-                # Store normalized alias
-                normalized = alias.lower()
+                # Apply full normalization chain
+                normalized = alias.lower() if match_rules.case_insensitive else alias
+
+                # Strip legal suffixes
+                for suffix in legal_suffixes:
+                    pattern = rf"[\s,.]?{re.escape(suffix)}\.?$"
+                    normalized = re.sub(pattern, "", normalized, flags=re.IGNORECASE)
+
+                # Expand common terms (e.g., "ins" -> "insurance")
+                for from_term, to_term in normalize_terms.items():
+                    pattern = rf"\b{re.escape(from_term)}\b"
+                    normalized = re.sub(pattern, to_term, normalized, flags=re.IGNORECASE)
+
+                # Strip punctuation
+                if match_rules.ignore_punctuation:
+                    normalized = re.sub(r"[^a-z0-9\s]", "", normalized)
+
+                normalized = normalized.strip()
                 alias_to_canonical[normalized] = entity.canonical
 
         return cls(

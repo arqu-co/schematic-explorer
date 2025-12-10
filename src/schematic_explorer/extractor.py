@@ -892,7 +892,7 @@ def extract_schematic(filepath: str, sheet_name: str | None = None) -> list[dict
 
 def extract_schematic_with_summaries(
     filepath: str, sheet_name: str | None = None
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[CarrierEntry], list[LayerSummary]]:
     """Extract schematic data along with layer summaries for cross-checking.
 
     Args:
@@ -908,4 +908,4 @@ def extract_schematic_with_summaries(
     """
     ws = _load_workbook(filepath, sheet_name)
     entries, summaries = extract_adaptive(ws)
-    return ([entry.to_dict() for entry in entries], [summary.to_dict() for summary in summaries])
+    return (entries, summaries)

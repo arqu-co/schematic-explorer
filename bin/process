@@ -66,15 +66,18 @@ def process_file(filepath: Path) -> bool:
             verification_data = run_verification(filepath, sheet)
 
         # Build output structure
+        # Convert CarrierEntry objects to dicts for JSON serialization
+        entries_dicts = [e.to_dict() for e in entries]
+
         # When verification is enabled, wrap in object with metadata
         # Otherwise, just output the entries array for backward compatibility
         if verification_data:
             output = {
-                "entries": entries,
+                "entries": entries_dicts,
                 "verification": verification_data,
             }
         else:
-            output = entries
+            output = entries_dicts
 
         # Write JSON output
         json_path = OUTPUT_DIR / f"{stem}.json"

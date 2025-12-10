@@ -373,11 +373,19 @@ class CarrierMatcher:
                 if alias in normalized:
                     alias_len = len(alias)
 
-                    # Apply short alias gating
+                    # Apply short alias gating only when:
+                    # 1. gating is enabled
+                    # 2. alias is short (<=5 chars)
+                    # 3. no context keywords found
+                    # 4. input is NOT longer than alias (if input is longer,
+                    #    e.g., "Chubb Bermuda" matching "chubb", the input
+                    #    provides its own context)
+                    input_provides_context = len(normalized) > alias_len
                     if (
                         self.config.match_rules.gate_short_aliases
                         and alias_len <= self.config.match_rules.short_alias_max_len
                         and not self._has_context_keyword(context_text)
+                        and not input_provides_context
                     ):
                         continue
 
@@ -414,14 +422,15 @@ class CarrierMatcher:
     def resolve_canonical(self, alias: str) -> str | None:
         """Resolve an alias to its canonical carrier name.
 
+        Uses full matching logic including containment matching.
+
         Args:
             alias: Carrier alias to resolve
 
         Returns:
             Canonical name if found, None otherwise
         """
-        normalized = self.normalize(alias)
-        return self.config.alias_to_canonical.get(normalized)
+        return self.match_carrier(alias)
 
 
 # =============================================================================
