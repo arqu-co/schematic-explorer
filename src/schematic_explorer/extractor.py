@@ -22,7 +22,14 @@ from .proximity import (
     match_currency_block,
     match_participation_block,
 )
-from .types import BILLION, CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
+from .types import (
+    BILLION,
+    CarrierEntry,
+    Layer,
+    LayerSummary,
+    parse_excess_notation,
+    parse_limit_value,
+)
 from .utils import build_merged_cell_map, get_cell_color, get_cell_value
 
 # =============================================================================
@@ -233,19 +240,19 @@ def _filter_primary_limits(limit_blocks: list[Block]) -> list[Block]:
     return primary_limits
 
 
-def _build_layer_info(primary_limits: list[Block], max_row: int) -> list[dict]:
-    """Build layer info dictionaries from primary limit blocks."""
+def _build_layer_info(primary_limits: list[Block], max_row: int) -> list[Layer]:
+    """Build Layer objects from primary limit blocks."""
     layers = []
     for i, block in enumerate(primary_limits):
         end_row = primary_limits[i + 1].row - 1 if i + 1 < len(primary_limits) else max_row
         layers.append(
-            {
-                "limit": _format_limit(block.value),
-                "limit_row": block.row,
-                "limit_col": block.col,
-                "start_row": block.row,
-                "end_row": end_row,
-            }
+            Layer(
+                limit=_format_limit(block.value),
+                limit_row=block.row,
+                limit_col=block.col,
+                start_row=block.row,
+                end_row=end_row,
+            )
         )
     return layers
 
@@ -264,14 +271,14 @@ def _format_limit(value) -> str:
 # =============================================================================
 
 
-def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary | None:
+def _extract_layer_summary(ws, layer: Layer, summary_info: dict) -> LayerSummary | None:
     """Extract layer-level summary data from summary columns.
 
     This data is used for cross-checking that carrier premiums sum to layer totals.
 
     Args:
         ws: The worksheet
-        layer: Layer dict with limit, start_row, end_row
+        layer: Layer object with limit, start_row, end_row
         summary_info: Dict with bound_premium_col, layer_target_col, layer_rate_col
 
     Returns:
@@ -285,8 +292,8 @@ def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary 
     if not any([bound_premium_col, layer_target_col, layer_rate_col]):
         return None
 
-    start_row = layer["start_row"]
-    end_row = layer["end_row"]
+    start_row = layer.start_row
+    end_row = layer.end_row
 
     layer_bound_premium = None
     layer_target = None
@@ -316,7 +323,7 @@ def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary 
     # Only return if we found at least one value
     if layer_bound_premium is not None or layer_target is not None or layer_rate is not None:
         return LayerSummary(
-            layer_limit=layer["limit"],
+            layer_limit=layer.limit,
             layer_target=layer_target,
             layer_rate=layer_rate,
             layer_bound_premium=layer_bound_premium,
@@ -376,19 +383,19 @@ def _split_multiline_carrier(carrier_block: Block) -> list[tuple[Block, str]]:
 
 
 def _extract_layer_data(
-    ws, blocks: list[Block], layer: dict, summary_cols: set[int] = None
+    ws, blocks: list[Block], layer: Layer, summary_cols: set[int] = None
 ) -> list[CarrierEntry]:
     """Extract carrier entries from a layer region.
 
     Args:
         ws: The worksheet
         blocks: All classified blocks
-        layer: Layer dict with start_row, end_row, limit
+        layer: Layer object with start_row, end_row, limit
         summary_cols: Set of column numbers to exclude (contain aggregate data, not per-carrier)
     """
     entries = []
-    start_row = layer["start_row"]
-    end_row = layer["end_row"]
+    start_row = layer.start_row
+    end_row = layer.end_row
     summary_cols = summary_cols or set()
 
     # Find all blocks in this layer's row range
@@ -473,7 +480,7 @@ def _filter_label_blocks(
     return result
 
 
-def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
+def _find_column_headers(ws, blocks: list[Block], layer: Layer) -> dict:
     """Find column header positions for Premium, Limit, Rate, TIV, etc.
 
     Looks in two places:
@@ -483,8 +490,8 @@ def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
     headers = {}
 
     # First pass: look in rows near or above the layer start (traditional layout)
-    search_start = max(1, layer["start_row"] - 5)
-    search_end = layer["start_row"] + 3
+    search_start = max(1, layer.start_row - 5)
+    search_end = layer.start_row + 3
     header_blocks = _filter_label_blocks(blocks, search_start, search_end)
     for block in header_blocks:
         val_lower = str(block.value).lower().strip()
@@ -493,7 +500,7 @@ def _find_column_headers(ws, blocks: list[Block], layer: dict) -> dict:
     # Second pass: look for sub-headers within the layer (for complex schematics)
     # Look for specific headers that appear mid-layer as data table column headers
     # These are typically in columns beyond A/B (which contain row labels)
-    layer_blocks = _filter_label_blocks(blocks, layer["start_row"], layer["end_row"], col_min=3)
+    layer_blocks = _filter_label_blocks(blocks, layer.start_row, layer.end_row, col_min=3)
     for block in layer_blocks:
         val_lower = str(block.value).lower().strip()
         _classify_sub_header(val_lower, block.col, headers)
@@ -538,7 +545,7 @@ def _classify_column_header(val_lower: str, col: int, headers: dict) -> None:
                 headers["tiv_data_col"] = col + 1
 
 
-def _find_row_labels(ws, blocks: list[Block], layer: dict) -> dict:
+def _find_row_labels(ws, blocks: list[Block], layer: Layer) -> dict:
     """Find row label positions for Premium, % Premium, etc.
 
     Many schematics use row labels in column A to indicate what each row contains.
@@ -546,8 +553,8 @@ def _find_row_labels(ws, blocks: list[Block], layer: dict) -> dict:
     This helps distinguish between "Premium" row and "% Premium" row.
     """
     labels = {}
-    start_row = layer["start_row"]
-    end_row = layer["end_row"]
+    start_row = layer.start_row
+    end_row = layer.end_row
 
     # First pass: look for labels in columns A or B (traditional layout)
     ab_blocks = _filter_label_blocks(blocks, start_row, end_row, col_max=2)
@@ -607,7 +614,7 @@ def _build_entry_from_proximity(
     ws,
     carrier: Block,
     data_blocks: list[Block],
-    layer: dict,
+    layer: Layer,
     column_headers: dict = None,
     row_labels: dict = None,
     original_cell: str = None,
@@ -618,7 +625,7 @@ def _build_entry_from_proximity(
         ws: The worksheet
         carrier: The carrier block to build an entry for
         data_blocks: List of data blocks to search for related data
-        layer: Layer dict with limit, start_row, end_row
+        layer: Layer object with limit, start_row, end_row
         column_headers: Dict of column header positions
         row_labels: Dict of row label positions
         original_cell: The actual Excel cell reference (for multi-line carriers)
@@ -628,7 +635,7 @@ def _build_entry_from_proximity(
     """
     # Define search ranges
     carrier_col_range = get_column_range(carrier)
-    row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer["end_row"] + 1))
+    row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer.end_row + 1))
 
     # Initialize extracted values
     participation = None
@@ -682,7 +689,7 @@ def _build_entry_from_proximity(
         _, attachment_point = parse_excess_notation(layer_desc)
 
     return CarrierEntry(
-        layer_limit=layer["limit"],
+        layer_limit=layer.limit,
         layer_description=layer_desc or "",
         carrier=carrier_name,
         participation_pct=participation,

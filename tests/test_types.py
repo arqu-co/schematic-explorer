@@ -2,12 +2,67 @@
 
 from schematic_explorer.types import (
     CarrierEntry,
+    Layer,
     LayerSummary,
     VerificationResult,
     parse_excess_notation,
     parse_limit_for_sort,
     parse_limit_value,
 )
+
+
+class TestLayer:
+    """Tests for Layer dataclass."""
+
+    def test_create_basic_layer(self):
+        """Test creating a basic Layer."""
+        layer = Layer(
+            limit="$50M",
+            limit_row=5,
+            limit_col=1,
+            start_row=5,
+            end_row=15,
+        )
+        assert layer.limit == "$50M"
+        assert layer.limit_row == 5
+        assert layer.limit_col == 1
+        assert layer.start_row == 5
+        assert layer.end_row == 15
+
+    def test_layer_to_dict(self):
+        """Test Layer to_dict conversion."""
+        layer = Layer(
+            limit="$100M",
+            limit_row=10,
+            limit_col=2,
+            start_row=10,
+            end_row=25,
+        )
+        d = layer.to_dict()
+        assert isinstance(d, dict)
+        assert d["limit"] == "$100M"
+        assert d["limit_row"] == 10
+        assert d["limit_col"] == 2
+        assert d["start_row"] == 10
+        assert d["end_row"] == 25
+
+    def test_layer_equality(self):
+        """Test Layer equality comparison."""
+        layer1 = Layer(
+            limit="$50M",
+            limit_row=5,
+            limit_col=1,
+            start_row=5,
+            end_row=15,
+        )
+        layer2 = Layer(
+            limit="$50M",
+            limit_row=5,
+            limit_col=1,
+            start_row=5,
+            end_row=15,
+        )
+        assert layer1 == layer2
 
 
 class TestCarrierEntry:

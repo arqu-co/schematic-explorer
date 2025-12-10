@@ -6,18 +6,6 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-# Import from extractor
-from schematic_explorer.extractor import (
-    _classify_column_header,
-    _classify_row_label,
-    _find_all_blocks,
-    _format_limit,
-    _identify_layers,
-    _split_multiline_carrier,
-    extract_schematic,
-    extract_schematic_with_summaries,
-)
-
 # Import from blocks
 from schematic_explorer.blocks import Block, _infer_type, classify_blocks
 
@@ -28,7 +16,18 @@ from schematic_explorer.carriers import (
     _load_carriers,
     _looks_like_policy_number,
     _normalize_for_match,
-    _KNOWN_CARRIERS,
+)
+
+# Import from extractor
+from schematic_explorer.extractor import (
+    _classify_column_header,
+    _classify_row_label,
+    _find_all_blocks,
+    _format_limit,
+    _identify_layers,
+    _split_multiline_carrier,
+    extract_schematic,
+    extract_schematic_with_summaries,
 )
 
 # Import from proximity
@@ -101,9 +100,10 @@ class TestLoadCarriers:
         """Test that carriers are loaded from YAML."""
         _load_carriers()
         # Should have some known carriers loaded
-        from schematic_explorer.carriers import _KNOWN_CARRIERS
+        # Re-import to get the current state (after autouse fixture cleared it)
+        from schematic_explorer.carriers import _KNOWN_CARRIERS as loaded_carriers
 
-        assert len(_KNOWN_CARRIERS) > 0
+        assert len(loaded_carriers) > 0
 
 
 class TestIsKnownCarrier:
@@ -389,7 +389,7 @@ class TestIdentifyLayers:
         classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
-        assert layers[0]["limit"] == "$50M"
+        assert layers[0].limit == "$50M"
 
     def test_multiple_layers(self, workbook):
         """Test identifying multiple layers."""
@@ -411,9 +411,9 @@ class TestIdentifyLayers:
         classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
 
-        assert layers[0]["start_row"] == 1
-        assert layers[0]["end_row"] == 4
-        assert layers[1]["start_row"] == 5
+        assert layers[0].start_row == 1
+        assert layers[0].end_row == 4
+        assert layers[1].start_row == 5
 
 
 class TestDetectSummaryColumns:
@@ -926,7 +926,7 @@ class TestIdentifyLayersAdditional:
         classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
-        assert layers[0]["limit"] == "$50M"
+        assert layers[0].limit == "$50M"
 
     def test_filters_premium_labeled_rows(self):
         """Test that rows with Premium labels are not treated as layers."""

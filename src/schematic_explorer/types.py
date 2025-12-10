@@ -28,6 +28,25 @@ _LIMIT_PATTERN = re.compile(r"(\$[\d,.]+[KMBkmb]?)")
 
 
 @dataclass
+class Layer:
+    """Represents a layer boundary in an insurance tower.
+
+    Layers are identified by their limit values and define row ranges
+    in the spreadsheet that contain carrier participation data.
+    """
+
+    limit: str  # Formatted limit (e.g., "$50M")
+    limit_row: int  # Row where the limit was found
+    limit_col: int  # Column where the limit was found
+    start_row: int  # First row of layer data
+    end_row: int  # Last row of layer data
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return asdict(self)
+
+
+@dataclass
 class CarrierEntry:
     """Represents a single carrier's participation in a layer."""
 
