@@ -614,14 +614,28 @@ def verify_extraction(
             metadata=metadata,
         )
     except Exception as e:
-        return VerificationResult(
-            score=0.0,
-            summary=f"Verification failed: {e}",
-            issues=[str(e)],
-            suggestions=[],
-            raw_response=str(e),
-            metadata={"parsing_method": "error", "fallback_used": True, "error": str(e)},
-        )
+        return _create_error_result(e, "Verification")
+
+
+def _create_error_result(error: Exception, context: str) -> VerificationResult:
+    """Create a standardized error VerificationResult.
+
+    Args:
+        error: The exception that occurred
+        context: Description of the operation that failed (e.g., "Verification", "Snapshot verification")
+
+    Returns:
+        VerificationResult with error information
+    """
+    error_str = str(error)
+    return VerificationResult(
+        score=0.0,
+        summary=f"{context} failed: {error_str}",
+        issues=[error_str],
+        suggestions=[],
+        raw_response=error_str,
+        metadata={"parsing_method": "error", "fallback_used": True, "error": error_str},
+    )
 
 
 def _convert_snapshot_issues(data: dict) -> list[str]:
@@ -669,14 +683,7 @@ def verify_snapshot(
             metadata=metadata,
         )
     except Exception as e:
-        return VerificationResult(
-            score=0.0,
-            summary=f"Snapshot verification failed: {e}",
-            issues=[str(e)],
-            suggestions=[],
-            raw_response=str(e),
-            metadata={"parsing_method": "error", "fallback_used": True, "error": str(e)},
-        )
+        return _create_error_result(e, "Snapshot verification")
 
 
 def cross_validate(
