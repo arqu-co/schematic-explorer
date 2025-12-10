@@ -82,7 +82,7 @@ def _load_carriers() -> None:
         return
 
     if _CARRIERS_FILE.exists():
-        with open(_CARRIERS_FILE) as f:
+        with open(_CARRIERS_FILE, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         _KNOWN_CARRIERS = {_normalize_for_match(c) for c in data.get("carriers", [])}
         _NON_CARRIERS = {_normalize_for_match(c) for c in data.get("non_carriers", [])}
