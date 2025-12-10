@@ -13,7 +13,7 @@ from typing import Any
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from .blocks import Block, classify_blocks
-from .carriers import _is_non_carrier, _looks_like_policy_number
+from .carriers import _is_non_carrier, _looks_like_policy_number, get_canonical_name
 from .proximity import (
     calculate_block_proximity,
     detect_summary_columns,
@@ -781,10 +781,13 @@ def _build_entry_from_proximity(
     if not attachment_point and layer_desc:
         _, attachment_point = parse_excess_notation(layer_desc)
 
+    # Resolve canonical carrier name (e.g., "ACE" → "Chubb")
+    canonical_carrier = get_canonical_name(carrier_name)
+
     return CarrierEntry(
         layer_limit=layer.limit,
         layer_description=layer_desc or "",
-        carrier=carrier_name,
+        carrier=carrier_name,  # Original text from spreadsheet
         participation_pct=participation,
         premium=premium,
         premium_share=premium_share,
@@ -795,6 +798,7 @@ def _build_entry_from_proximity(
         row_span=carrier.rows,
         fill_color=get_cell_color(ws, carrier.row, carrier.col),
         attachment_point=attachment_point,
+        canonical_carrier=canonical_carrier,  # Resolved canonical name
     )
 
 
