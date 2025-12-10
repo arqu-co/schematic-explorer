@@ -45,7 +45,7 @@ export function parseLimit(limit: string): number {
 /**
  * Format a number as USD currency (e.g., $1,234,567).
  */
-export function formatCurrency(value: number | null): string {
+export function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -57,7 +57,7 @@ export function formatCurrency(value: number | null): string {
 /**
  * Format a decimal as a percentage (e.g., 0.25 -> "25.0%").
  */
-export function formatPercent(value: number | null): string {
+export function formatPercent(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return `${(value * 100).toFixed(1)}%`;
 }

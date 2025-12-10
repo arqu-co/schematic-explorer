@@ -12,7 +12,7 @@ import {
   parseRange,
   sanitizeHtml,
 } from './utils';
-import type { CarrierEntry } from './types';
+import { createCarrierEntry } from './test-utils';
 
 describe('parseLimit', () => {
   it('parses millions correctly', () => {
@@ -50,7 +50,7 @@ describe('formatCurrency', () => {
 
   it('formats null/undefined as em dash', () => {
     expect(formatCurrency(null)).toBe('—');
-    expect(formatCurrency(undefined as unknown as null)).toBe('—');
+    expect(formatCurrency(undefined)).toBe('—');
   });
 
   it('formats zero', () => {
@@ -67,7 +67,7 @@ describe('formatPercent', () => {
 
   it('formats null/undefined as em dash', () => {
     expect(formatPercent(null)).toBe('—');
-    expect(formatPercent(undefined as unknown as null)).toBe('—');
+    expect(formatPercent(undefined)).toBe('—');
   });
 });
 
@@ -92,10 +92,10 @@ describe('hexToRgba', () => {
 
 describe('groupByLayer', () => {
   it('groups entries by layer limit', () => {
-    const entries: CarrierEntry[] = [
-      { layer_limit: '$50M', carrier: 'Carrier A', premium: 100000 } as CarrierEntry,
-      { layer_limit: '$50M', carrier: 'Carrier B', premium: 200000 } as CarrierEntry,
-      { layer_limit: '$25M', carrier: 'Carrier C', premium: 50000 } as CarrierEntry,
+    const entries = [
+      createCarrierEntry({ layer_limit: '$50M', carrier: 'Carrier A', premium: 100000 }),
+      createCarrierEntry({ layer_limit: '$50M', carrier: 'Carrier B', premium: 200000 }),
+      createCarrierEntry({ layer_limit: '$25M', carrier: 'Carrier C', premium: 50000 }),
     ];
 
     const layers = groupByLayer(entries);

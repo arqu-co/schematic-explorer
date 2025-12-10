@@ -6,33 +6,19 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Theme } from '@radix-ui/themes';
 import { MainContent } from './MainContent';
-import type { CarrierEntry, Layer } from '../types';
+import { createCarrierEntry } from '../test-utils';
+import type { Layer } from '../types';
 
 // Wrapper component for Radix UI Theme
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return <Theme>{children}</Theme>;
 }
 
-// Helper to create mock carrier entries
-function createMockEntry(overrides: Partial<CarrierEntry> = {}): CarrierEntry {
-  return {
-    carrier: 'Test Carrier',
-    layer_limit: '$50M',
-    participation_pct: 0.25,
-    premium: 100000,
-    attachment_point: null,
-    terms: null,
-    fill_color: null,
-    excel_range: 'B5',
-    ...overrides,
-  } as CarrierEntry;
-}
-
 // Helper to create mock layers
 function createMockLayer(overrides: Partial<Layer> = {}): Layer {
   return {
     limit: '$50M',
-    entries: [createMockEntry()],
+    entries: [createCarrierEntry()],
     totalPremium: 100000,
     ...overrides,
   };
@@ -40,7 +26,7 @@ function createMockLayer(overrides: Partial<Layer> = {}): Layer {
 
 describe('MainContent', () => {
   const defaultProps = {
-    entries: [createMockEntry()],
+    entries: [createCarrierEntry()],
     layers: [createMockLayer()],
     stem: 'test-file',
     activeTab: 'tower',
@@ -109,7 +95,7 @@ describe('MainContent', () => {
     it('shows carrier count per layer', () => {
       const layers = [
         createMockLayer({
-          entries: [createMockEntry(), createMockEntry({ carrier: 'Another Carrier' })],
+          entries: [createCarrierEntry(), createCarrierEntry({ carrier: 'Another Carrier' })],
         }),
       ];
 
@@ -124,7 +110,7 @@ describe('MainContent', () => {
 
     it('calls onCellClick when carrier block is clicked', () => {
       const onCellClick = vi.fn();
-      const entry = createMockEntry();
+      const entry = createCarrierEntry();
 
       render(
         <TestWrapper>
@@ -158,7 +144,7 @@ describe('MainContent', () => {
     });
 
     it('displays carrier data in table rows', () => {
-      const entry = createMockEntry({
+      const entry = createCarrierEntry({
         carrier: 'Table Carrier',
         participation_pct: 0.5,
         premium: 250000,
@@ -178,7 +164,7 @@ describe('MainContent', () => {
 
   describe('json view', () => {
     it('renders JSON view when activeTab is json', () => {
-      const entry = createMockEntry({ carrier: 'JSON Carrier' });
+      const entry = createCarrierEntry({ carrier: 'JSON Carrier' });
 
       render(
         <TestWrapper>
@@ -206,7 +192,7 @@ describe('MainContent', () => {
 
   describe('formatting', () => {
     it('formats currency correctly', () => {
-      const entry = createMockEntry({ premium: 1234567 });
+      const entry = createCarrierEntry({ premium: 1234567 });
 
       render(
         <TestWrapper>
@@ -218,7 +204,7 @@ describe('MainContent', () => {
     });
 
     it('formats percentage correctly', () => {
-      const entry = createMockEntry({ participation_pct: 0.333 });
+      const entry = createCarrierEntry({ participation_pct: 0.333 });
 
       render(
         <TestWrapper>
