@@ -1,7 +1,8 @@
 """Type definitions for insurance tower extraction."""
 
 import re
-from dataclasses import asdict, dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
 
 # =============================================================================
 # Magnitude Constants
@@ -25,6 +26,157 @@ _EXCESS_PATTERN_NO_DOLLAR = re.compile(
     re.IGNORECASE,
 )
 _LIMIT_PATTERN = re.compile(r"(\$[\d,.]+[KMBkmb]?)")
+
+
+# =============================================================================
+# Carrier Detection Configuration
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class CarrierEntity:
+    """A carrier with its canonical name and aliases.
+
+    Used for alias resolution - multiple aliases map to one canonical name.
+    Example: ACE, ACE American, Westchester all resolve to "Chubb".
+    """
+
+    canonical: str
+    aliases: frozenset[str]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CarrierEntity":
+        """Create from YAML dict with 'canonical' and 'aliases' keys."""
+        return cls(
+            canonical=data["canonical"],
+            aliases=frozenset(data.get("aliases", [data["canonical"]])),
+        )
+
+
+@dataclass(frozen=True)
+class MatchRules:
+    """Configuration for carrier matching behavior.
+
+    Controls case sensitivity, punctuation handling, alias matching strategy,
+    and context-aware gating for short/ambiguous carrier names.
+    """
+
+    case_insensitive: bool = True
+    ignore_punctuation: bool = True
+    longest_alias_wins: bool = True
+    gate_short_aliases: bool = True
+    short_alias_max_len: int = 5
+    short_alias_keywords: frozenset[str] = field(
+        default_factory=lambda: frozenset(
+            {
+                "carrier",
+                "insurer",
+                "market",
+                "underwriter",
+                "syndicate",
+                "layer",
+                "xs",
+                "excess",
+                "limit",
+                "attachment",
+                "premium",
+                "share",
+            }
+        )
+    )
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MatchRules":
+        """Create from YAML match_rules section."""
+        gate_config = data.get("gate_short_aliases", {})
+        keywords = gate_config.get("require_any_nearby_keywords", [])
+
+        return cls(
+            case_insensitive=data.get("case_insensitive", True),
+            ignore_punctuation=data.get("ignore_punctuation", True),
+            longest_alias_wins=data.get("longest_alias_wins", True),
+            gate_short_aliases=gate_config.get("enabled", True),
+            short_alias_max_len=gate_config.get("max_len", 5),
+            short_alias_keywords=frozenset(kw.lower() for kw in keywords)
+            if keywords
+            else cls.short_alias_keywords,
+        )
+
+
+@dataclass(frozen=True)
+class CarrierConfig:
+    """Complete carrier detection configuration.
+
+    Loaded from carriers.yml and used by CarrierMatcher.
+    Includes pre-built lookup maps for O(1) matching performance.
+    """
+
+    match_rules: MatchRules
+    legal_suffixes: frozenset[str]
+    normalize_terms: Mapping[str, str]  # "ins" -> "insurance"
+    entities: tuple[CarrierEntity, ...]
+    structural_labels: frozenset[str]
+    brokers_wholesalers: frozenset[str]
+    # Pre-built lookup maps (built at load time)
+    alias_to_canonical: Mapping[str, str]  # normalized alias -> canonical
+    all_non_carriers: frozenset[str]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CarrierConfig":
+        """Create from full YAML config."""
+        match_rules = MatchRules.from_dict(data.get("match_rules", {}))
+
+        # Parse normalization config
+        norm_config = data.get("normalization", {})
+        legal_suffixes = frozenset(
+            s.lower() for s in norm_config.get("legal_suffixes", [])
+        )
+
+        # Build normalize_terms from list of {from: [...], to: "..."} dicts
+        normalize_terms: dict[str, str] = {}
+        for term_mapping in norm_config.get("normalize_common_terms", []):
+            to_val = term_mapping.get("to", "")
+            for from_val in term_mapping.get("from", []):
+                normalize_terms[from_val.lower()] = to_val.lower()
+
+        # Parse carrier entities
+        entities = tuple(
+            CarrierEntity.from_dict(e) for e in data.get("carrier_entities", [])
+        )
+
+        # Parse non-carriers
+        non_carriers_config = data.get("non_carriers", {})
+        structural_labels = frozenset(
+            s.lower() for s in non_carriers_config.get("structural_labels", [])
+        )
+        brokers_wholesalers = frozenset(
+            s.lower() for s in non_carriers_config.get("brokers_wholesalers", [])
+        )
+        all_non_carriers = structural_labels | brokers_wholesalers
+
+        # Build alias lookup map (normalized alias -> canonical)
+        alias_to_canonical: dict[str, str] = {}
+        for entity in entities:
+            for alias in entity.aliases:
+                # Store normalized alias
+                normalized = alias.lower()
+                alias_to_canonical[normalized] = entity.canonical
+
+        return cls(
+            match_rules=match_rules,
+            legal_suffixes=legal_suffixes,
+            normalize_terms=normalize_terms,
+            entities=entities,
+            structural_labels=structural_labels,
+            brokers_wholesalers=brokers_wholesalers,
+            alias_to_canonical=alias_to_canonical,
+            all_non_carriers=all_non_carriers,
+        )
+
+
+# =============================================================================
+# Carrier Matching Context
+# =============================================================================
 
 
 @dataclass
@@ -117,11 +269,15 @@ class Layer:
 
 @dataclass
 class CarrierEntry:
-    """Represents a single carrier's participation in a layer."""
+    """Represents a single carrier's participation in a layer.
+
+    The carrier field contains the original text from the spreadsheet,
+    while canonical_carrier contains the resolved canonical name if available.
+    """
 
     layer_limit: str
     layer_description: str
-    carrier: str
+    carrier: str  # Original text from spreadsheet (e.g., "ACE American")
     participation_pct: float | None
     premium: float | None
     premium_share: float | None
@@ -132,6 +288,7 @@ class CarrierEntry:
     row_span: int
     fill_color: str | None = None
     attachment_point: str | None = None
+    canonical_carrier: str | None = None  # Resolved canonical name (e.g., "Chubb")
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
