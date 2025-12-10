@@ -20,7 +20,7 @@ export default defineConfig({
               .sort()
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify(files))
-          } catch (err) {
+          } catch {
             res.statusCode = 500
             res.end(JSON.stringify({ error: 'Failed to read output directory' }))
           }

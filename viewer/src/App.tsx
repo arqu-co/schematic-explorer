@@ -4,61 +4,8 @@ import Markdown from 'react-markdown';
 import * as XLSX from 'xlsx';
 import '@radix-ui/themes/styles.css';
 import type { CarrierEntry, SchematicFile, Layer } from './types';
+import { formatCurrency, formatPercent, hexToRgba, groupByLayer, parseRange } from './utils';
 import './App.css';
-
-function parseLimit(limit: string): number {
-  const cleaned = limit.replace('$', '').replace(',', '').toUpperCase();
-  let multiplier = 1;
-  let value = cleaned;
-  if (cleaned.endsWith('M')) {
-    multiplier = 1_000_000;
-    value = cleaned.slice(0, -1);
-  } else if (cleaned.endsWith('K')) {
-    multiplier = 1_000;
-    value = cleaned.slice(0, -1);
-  } else if (cleaned.endsWith('B')) {
-    multiplier = 1_000_000_000;
-    value = cleaned.slice(0, -1);
-  }
-  return parseFloat(value) * multiplier || 0;
-}
-
-function groupByLayer(entries: CarrierEntry[]): Layer[] {
-  const layerMap = new Map<string, CarrierEntry[]>();
-
-  entries.forEach(entry => {
-    const existing = layerMap.get(entry.layer_limit) || [];
-    existing.push(entry);
-    layerMap.set(entry.layer_limit, existing);
-  });
-
-  return Array.from(layerMap.entries())
-    .map(([limit, entries]) => ({
-      limit,
-      entries,
-      totalPremium: entries.reduce((sum, e) => sum + (e.premium || 0), 0)
-    }))
-    .sort((a, b) => parseLimit(b.limit) - parseLimit(a.limit));
-}
-
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null || value === undefined) return '—';
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function hexToRgba(hex: string | null, alpha: number = 0.3): string {
-  if (!hex) return 'transparent';
-  const cleanHex = hex.startsWith('FF') && hex.length === 8 ? hex.slice(2) : hex;
-  const r = parseInt(cleanHex.slice(0, 2), 16);
-  const g = parseInt(cleanHex.slice(2, 4), 16);
-  const b = parseInt(cleanHex.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 function TowerVisualization({ layers, onCellClick }: { layers: Layer[]; onCellClick?: (entry: CarrierEntry) => void }) {
   return (
@@ -165,29 +112,6 @@ function InsightsPanel({ insights }: { insights: string | null }) {
       </Box>
     </Box>
   );
-}
-
-function parseRange(range: string): { startCol: number; startRow: number; endCol: number; endRow: number } | null {
-  // Parse ranges like "B5", "B5:D7", "Sheet1!B5:D7"
-  const cellPart = range.includes('!') ? range.split('!')[1] : range;
-  const match = cellPart.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i);
-  if (!match) return null;
-
-  const colToNum = (col: string) => {
-    let num = 0;
-    for (let i = 0; i < col.length; i++) {
-      num = num * 26 + col.charCodeAt(i) - 64;
-    }
-    return num;
-  };
-
-  // Convert to 0-indexed for HTML table access
-  const startCol = colToNum(match[1].toUpperCase()) - 1;
-  const startRow = parseInt(match[2]) - 1;
-  const endCol = match[3] ? colToNum(match[3].toUpperCase()) - 1 : startCol;
-  const endRow = match[4] ? parseInt(match[4]) - 1 : startRow;
-
-  return { startCol, startRow, endCol, endRow };
 }
 
 function ExcelViewer({ stem, highlightRange }: { stem: string; highlightRange?: string | null }) {
