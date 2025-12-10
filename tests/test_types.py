@@ -4,6 +4,7 @@ from schematic_explorer.types import (
     CarrierEntry,
     Layer,
     LayerSummary,
+    SummaryColumnInfo,
     VerificationResult,
     parse_excess_notation,
     parse_limit_for_sort,
@@ -63,6 +64,43 @@ class TestLayer:
             end_row=15,
         )
         assert layer1 == layer2
+
+
+class TestSummaryColumnInfo:
+    """Tests for SummaryColumnInfo dataclass."""
+
+    def test_create_basic_summary_column_info(self):
+        """Test creating a basic SummaryColumnInfo."""
+        info = SummaryColumnInfo(
+            columns={10, 12, 15},
+            bound_premium_col=10,
+            layer_target_col=12,
+            layer_rate_col=15,
+        )
+        assert info.columns == {10, 12, 15}
+        assert info.bound_premium_col == 10
+        assert info.layer_target_col == 12
+        assert info.layer_rate_col == 15
+
+    def test_create_with_defaults(self):
+        """Test SummaryColumnInfo with default None values."""
+        info = SummaryColumnInfo(columns=set())
+        assert info.columns == set()
+        assert info.bound_premium_col is None
+        assert info.layer_target_col is None
+        assert info.layer_rate_col is None
+
+    def test_to_dict(self):
+        """Test to_dict conversion."""
+        info = SummaryColumnInfo(
+            columns={5, 6},
+            bound_premium_col=5,
+        )
+        d = info.to_dict()
+        assert isinstance(d, dict)
+        assert d["columns"] == {5, 6}
+        assert d["bound_premium_col"] == 5
+        assert d["layer_target_col"] is None
 
 
 class TestCarrierEntry:

@@ -28,6 +28,24 @@ _LIMIT_PATTERN = re.compile(r"(\$[\d,.]+[KMBkmb]?)")
 
 
 @dataclass
+class SummaryColumnInfo:
+    """Information about summary/aggregate columns detected in a worksheet.
+
+    Summary columns contain layer-level totals rather than per-carrier data.
+    They are excluded from carrier extraction but used for cross-checking.
+    """
+
+    columns: set[int]  # Set of column numbers to exclude from carrier extraction
+    bound_premium_col: int | None = None  # Column with Layer Bound Premiums
+    layer_target_col: int | None = None  # Column with Layer Target
+    layer_rate_col: int | None = None  # Column with Layer Rate
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return asdict(self)
+
+
+@dataclass
 class Layer:
     """Represents a layer boundary in an insurance tower.
 

@@ -425,29 +425,29 @@ class TestDetectSummaryColumns:
         ws["A1"] = "Carrier"
         ws["B1"] = "Premium"
         result = detect_summary_columns(ws)
-        assert len(result["columns"]) == 0
+        assert len(result.columns) == 0
 
     def test_detect_bound_premium_column(self, workbook):
         """Test detecting Layer Bound Premium column."""
         wb, ws = workbook
         ws["Z1"] = "Layer Bound Premium"
         result = detect_summary_columns(ws)
-        assert 26 in result["columns"]  # Column Z = 26
-        assert result["bound_premium_col"] == 26
+        assert 26 in result.columns  # Column Z = 26
+        assert result.bound_premium_col == 26
 
     def test_detect_layer_rate_column(self, workbook):
         """Test detecting Layer Rate column."""
         wb, ws = workbook
         ws["Y1"] = "Layer Rate"
         result = detect_summary_columns(ws)
-        assert 25 in result["columns"]
+        assert 25 in result.columns
 
     def test_detect_year_layer_premium(self, workbook):
         """Test detecting year-prefixed layer premium columns."""
         wb, ws = workbook
         ws["X1"] = "2019 Layer Premium"
         result = detect_summary_columns(ws)
-        assert 24 in result["columns"]
+        assert 24 in result.columns
 
 
 class TestClassifyColumnHeader:
@@ -868,7 +868,7 @@ class TestDetectSummaryColumnsAdditional:
         ws = wb.active
         ws["X1"] = "Annualized Premium"
         result = detect_summary_columns(ws)
-        assert 24 in result["columns"]
+        assert 24 in result.columns
 
     def test_detect_total_premium_column(self):
         """Test detecting total premium column."""
@@ -876,7 +876,7 @@ class TestDetectSummaryColumnsAdditional:
         ws = wb.active
         ws["W1"] = "Total Premium"
         result = detect_summary_columns(ws)
-        assert 23 in result["columns"]
+        assert 23 in result.columns
 
     def test_detect_layer_target_column(self):
         """Test detecting layer target column."""
@@ -884,8 +884,8 @@ class TestDetectSummaryColumnsAdditional:
         ws = wb.active
         ws["V1"] = "Layer Target"
         result = detect_summary_columns(ws)
-        assert 22 in result["columns"]
-        assert result["layer_target_col"] == 22
+        assert 22 in result.columns
+        assert result.layer_target_col == 22
 
     def test_detect_fees_following_year_premium(self):
         """Test detecting Fees/Taxes following year layer premium."""
@@ -896,10 +896,10 @@ class TestDetectSummaryColumnsAdditional:
         ws["W1"] = "Taxes"
         ws["X1"] = "Total"
         result = detect_summary_columns(ws)
-        assert 21 in result["columns"]  # U
-        assert 22 in result["columns"]  # V (Fees)
-        assert 23 in result["columns"]  # W (Taxes)
-        assert 24 in result["columns"]  # X (Total)
+        assert 21 in result.columns  # U
+        assert 22 in result.columns  # V (Fees)
+        assert 23 in result.columns  # W (Taxes)
+        assert 24 in result.columns  # X (Total)
 
 
 class TestIdentifyLayersAdditional:
@@ -1045,8 +1045,8 @@ class TestYearLayerRateColumn:
         ws["V1"] = "2019 Layer Rate"
 
         result = detect_summary_columns(ws)
-        assert 21 in result["columns"]  # U
-        assert 22 in result["columns"]  # V
+        assert 21 in result.columns  # U
+        assert 22 in result.columns  # V
 
 
 class TestIdentifyLayersYearPattern:

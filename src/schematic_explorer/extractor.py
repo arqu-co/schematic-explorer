@@ -27,6 +27,7 @@ from .types import (
     CarrierEntry,
     Layer,
     LayerSummary,
+    SummaryColumnInfo,
     parse_excess_notation,
     parse_limit_value,
 )
@@ -70,7 +71,7 @@ def extract_adaptive(ws) -> tuple[list[CarrierEntry], list[LayerSummary]]:
     # Step 3: Detect summary/aggregate columns to exclude from carrier extraction
     # These columns contain layer-level data like "Annualized Layer Rate" not per-carrier data
     summary_info = detect_summary_columns(ws)
-    summary_cols = summary_info["columns"]
+    summary_cols = summary_info.columns
 
     # Step 4: Find layer structure by looking for large limit values
     layers = _identify_layers(blocks, ws)
@@ -271,7 +272,7 @@ def _format_limit(value) -> str:
 # =============================================================================
 
 
-def _extract_layer_summary(ws, layer: Layer, summary_info: dict) -> LayerSummary | None:
+def _extract_layer_summary(ws, layer: Layer, summary_info: SummaryColumnInfo) -> LayerSummary | None:
     """Extract layer-level summary data from summary columns.
 
     This data is used for cross-checking that carrier premiums sum to layer totals.
@@ -279,14 +280,14 @@ def _extract_layer_summary(ws, layer: Layer, summary_info: dict) -> LayerSummary
     Args:
         ws: The worksheet
         layer: Layer object with limit, start_row, end_row
-        summary_info: Dict with bound_premium_col, layer_target_col, layer_rate_col
+        summary_info: SummaryColumnInfo with bound_premium_col, layer_target_col, layer_rate_col
 
     Returns:
         LayerSummary or None if no summary data found for this layer
     """
-    bound_premium_col = summary_info.get("bound_premium_col")
-    layer_target_col = summary_info.get("layer_target_col")
-    layer_rate_col = summary_info.get("layer_rate_col")
+    bound_premium_col = summary_info.bound_premium_col
+    layer_target_col = summary_info.layer_target_col
+    layer_rate_col = summary_info.layer_rate_col
 
     # If no summary columns detected, skip
     if not any([bound_premium_col, layer_target_col, layer_rate_col]):

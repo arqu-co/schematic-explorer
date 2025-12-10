@@ -10,6 +10,7 @@ This module handles spatial proximity logic:
 import re
 
 from .blocks import PERCENTAGE_WHOLE_NUMBER_THRESHOLD, Block
+from .types import SummaryColumnInfo
 
 # =============================================================================
 # Constants
@@ -124,7 +125,7 @@ def _classify_summary_column(val_lower: str, col: int, result: dict) -> None:
             break
 
 
-def detect_summary_columns(ws) -> dict:
+def detect_summary_columns(ws) -> SummaryColumnInfo:
     """Detect columns that contain summary/aggregate data rather than per-carrier data.
 
     These columns typically have headers like:
@@ -133,12 +134,10 @@ def detect_summary_columns(ws) -> dict:
     - "Layer Rates"
     - "Layer Target"
 
-    Returns dict with:
-        - 'columns': set of column numbers to exclude from carrier extraction
-        - 'bound_premium_col': column with Layer Bound Premiums (for cross-check)
-        - 'layer_target_col': column with Layer Target
-        - 'layer_rate_col': column with Layer Rate
+    Returns:
+        SummaryColumnInfo with detected column information
     """
+    # Use internal dict for building, convert to dataclass at end
     result = {
         "columns": set(),
         "bound_premium_col": None,
@@ -166,7 +165,12 @@ def detect_summary_columns(ws) -> dict:
             # Check for standard summary column patterns
             _classify_summary_column(val_lower, col, result)
 
-    return result
+    return SummaryColumnInfo(
+        columns=result["columns"],
+        bound_premium_col=result["bound_premium_col"],
+        layer_target_col=result["layer_target_col"],
+        layer_rate_col=result["layer_rate_col"],
+    )
 
 
 # =============================================================================
