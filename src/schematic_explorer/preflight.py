@@ -17,6 +17,13 @@ from dataclasses import dataclass
 from .blocks import classify_blocks
 from .extractor import _find_all_blocks, _identify_layers, _load_workbook
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Minimum ratio of high-confidence carriers to total carriers for preflight pass
+MIN_HIGH_CONFIDENCE_CARRIER_RATIO = 0.5
+
 
 @dataclass
 class PreflightResult:
@@ -121,7 +128,7 @@ def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
     if not carriers:
         issues.append("No carrier names detected")
         suggestions.append("Carrier names should be text cells with company-like names")
-    elif len(high_conf_carriers) < len(carriers) * 0.5:
+    elif len(high_conf_carriers) < len(carriers) * MIN_HIGH_CONFIDENCE_CARRIER_RATIO:
         issues.append(
             f"Low confidence on carrier detection ({len(high_conf_carriers)}/{len(carriers)} high confidence)"
         )

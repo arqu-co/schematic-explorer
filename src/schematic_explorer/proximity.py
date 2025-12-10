@@ -18,6 +18,7 @@ from .types import SummaryColumnInfo
 
 # Proximity thresholds for spatial matching
 MAX_COLUMN_DISTANCE = 3  # Maximum columns away for non-aligned data matching
+ADJACENT_ROW_TOLERANCE = 1  # Rows above/below to consider as "same row"
 
 # Column limits
 MAX_HEADER_SCAN_ROW = 10  # How many rows to scan for headers
@@ -82,7 +83,7 @@ def is_block_relevant(
         return True
 
     # For non-column-aligned blocks, require same row and close proximity
-    if abs(block.row - carrier.row) <= 1 and abs(block.col - carrier.col) <= MAX_COLUMN_DISTANCE:
+    if abs(block.row - carrier.row) <= ADJACENT_ROW_TOLERANCE and abs(block.col - carrier.col) <= MAX_COLUMN_DISTANCE:
         return True
 
     return False
@@ -216,7 +217,7 @@ def match_participation_block(
 
     if participation_row:
         # Only accept values from participation row (or row below)
-        if block.row == participation_row or block.row == participation_row + 1:
+        if block.row == participation_row or block.row == participation_row + ADJACENT_ROW_TOLERANCE:
             return _normalize_percentage(block.value)
         return None
     else:
@@ -275,7 +276,7 @@ def _is_row_match(block_row: int, target_row: int | None) -> bool:
     """Check if block row matches target row or adjacent row."""
     if target_row is None:
         return False
-    return block_row == target_row or block_row == target_row + 1
+    return block_row == target_row or block_row == target_row + ADJACENT_ROW_TOLERANCE
 
 
 def _match_currency_by_row(
