@@ -1,205 +1,422 @@
-# Known insurance carriers for tower extraction
-# Matching is case-insensitive and ignores punctuation
+# Enhanced carrier detection configuration
+# - Canonical↔alias resolution for carrier name normalization
+# - Longest-alias-wins matching to prevent partial matches
+# - Context-aware short alias gating for ambiguous tokens
+# - Legal suffix normalization (Inc, LLC, etc.)
 
-carriers:
-  # Major insurers
-  - AIG
-  - Chubb
-  - Zurich
-  - Allianz
-  - AXA
-  - Travelers
-  - Liberty Mutual
-  - Hartford
-  - CNA
-  - Nationwide
-  - Progressive
-  - Allstate
-  - USAA
-  - Farmers
-  - State Farm
-  - GEICO
-  - MetLife
-  - Prudential
-  - Cigna
+match_rules:
+  case_insensitive: true
+  ignore_punctuation: true
+  longest_alias_wins: true
+  gate_short_aliases:
+    enabled: true
+    max_len: 5
+    require_any_nearby_keywords:
+      - carrier
+      - insurer
+      - market
+      - underwriter
+      - syndicate
+      - "certain underwriters"
+      - layer
+      - xs
+      - excess
+      - limit
+      - attachment
+      - premium
+      - share
 
-  # Specialty / E&S insurers
-  - Lexington
-  - Ironshore
-  - Markel
-  - Argo
-  - Everest
-  - Arch
-  - AXIS
-  - Allied World
-  - AWAC
-  - Aspen
-  - Beazley
-  - Hiscox
-  - Sompo
-  - Tokio Marine
-  - Starr
-  - RSUI
-  - Berkshire
-  - Berkley
-  - WR Berkley
-  - Swiss Re
-  - Munich Re
-  - Hannover
-  - SCOR
-  - Gen Re
-  - Transatlantic
-  - XL Catlin
-  - XL
-  - Catlin
-  - Endurance
-  - ACE
-  - Navigators
-  - Great American
-  - Ohio Casualty
-  - Westchester
-  - Landmark
-  - Hudson
-  - Kinsale
-  - James River
-  - RLI
-  - Nautilus
-  - Core Specialty
-  - Homeland
-  - Intact
-  - Risksmith
-  - GenStar
-  - Helix
-  - Canopius
-  - Apollo
-  - Convex
-  - Fidelis
+normalization:
+  strip_legal_suffixes: true
+  legal_suffixes:
+    - inc
+    - incorporated
+    - llc
+    - ltd
+    - limited
+    - plc
+    - corp
+    - corporation
+    - co
+    - company
+    - group
+    - holdings
+  normalize_common_terms:
+    - { from: ["ins", "ins."], to: "insurance" }
+    - { from: ["re", "re."], to: "re" }
 
-  # Lloyd's syndicates
-  - Lloyds
-  - Brit
-  - Chaucer
-  - Talbot
-  - Amlin
-  - Ascot
-  - Atrium
-  - Argenta
-
-  # Bermuda / offshore
-  - Partner Re
-  - Renaissance Re
-  - Platinum
-  - Montpelier
-
-  # Additional carriers from extraction
-  - Palms Specialty
-  - Obsidian
-  - Steadfast
-  - Westfield
-  - Crum & Forster
-  - Columbia Casualty
-  - Velocity
-  - United Specialty
-  - National Fire & Marine
-  - Fortegra
-  - Emerald Bay
-  - Sutton
-  - Kemah
-  - Specialty Builders
-  - Superior Specialty
-  - Western World
-  - Palomar
-  - Dellwood
-  - Alchemy
-  - Colony
-  - Seneca
-  - One Beacon
-  - Diamond State
-  - Hallmark
-  - Maxum
-  - Arrowhead
-  - Pioneer
-  - NEON
-  - Ategrity
-  - Alcor
-  - Mitsui
-  - Scottsdale
-  - Ariel Re
-  - JEM
-  - TRU
-  - Target
-  - GEP
-  - Lancashire
-  - NOA
-  - CGM
-  - Ki
-  - Certain Underwriters
-  - Starstone
-  - Vicko
-  - Commonwealth
-
-# Terms that look like carriers but aren't
 non_carriers:
-  # Row labels that appear in deductible/allocation sections
-  - Bermuda
-  - London
-  - Direct
-  - US Wholesaler
-  - U.S. Wholesaler
+  structural_labels:
+    - Bermuda
+    - London
+    - Direct
+    - Wholesaler
+    - "US Wholesaler"
+    - "U.S. Wholesaler"
+    - Total
+    - Subtotal
+    - Aggregate
+    - Primary
+    - Excess
+    - Layer
+    - Attachment
+    - Limit
+    - Premium
+    - Rate
+    - TIV
+    - Values
+    - Exposure
+    - Loss
+    - Claim
+    - "Carrier Share"
+    - "Layer Premium"
+    - "Program Deductibles"
+    - Deductibles
+    - "Terms & Conditions"
+    - "Unused Capacity"
+    - Hail
+    - "Water Damage"
+    - "Plus Agg"
+    - "Plus-Agg"
+    - "Binding TIV"
+    - SRU
+    - "RT Layer"
+    - "TIV BY YEAR"
+    - "Increase/Decrease"
+    - PERILS
+    - "Updated TIV"
+    - "Subject to"
+    - "No RP for"
+    - Admitted
+    - "MP $50k share"
+    - "Tied to"
+    - "Either/Or"
+    - confirmation
+    - "OK with"
+    - "Can't offer"
+    - "more capacity"
+    - "Hiscox Conditions"
+    - "Markel Conditions"
+    - "Navigators Terms"
+    - "Kemah Terms"
+    - "Increase in values"
+    - "Buy Down"
+    - "All Risk/DIC"
+    - "All Risk Premium"
+    - "DIC Premium"
+  brokers_wholesalers:
+    - AmWins
+    - Lockton
 
-  # Other non-carrier terms
-  - Unused Capacity
-  - Hail
-  - Water Damage
-  - Plus Agg
-  - Plus-Agg
-  - Wholesaler
-  - Total
-  - Subtotal
-  - Aggregate
-  - Primary
-  - Excess
-  - Layer
-  - Attachment
-  - Limit
-  - Premium
-  - Rate
-  - TIV
-  - Values
-  - Exposure
-  - Loss
-  - Claim
-  - Carrier Share
-  - Layer Premium
-  - US Wholesaler
-  - Program Deductibles
-  - Deductibles
-  - Binding TIV
-  - AmWins
-  - Lockton
-  - SRU
-  - RT Layer
-  - TIV BY YEAR
-  - Increase/Decrease
-  - PERILS
-  - Updated TIV
-  - Terms & Conditions
-  - Subject to
-  - No RP for
-  - Admitted
-  - MP $50k share
-  - Tied to
-  - Either/Or
-  - confirmation
-  - OK with
-  - Can't offer
-  - more capacity
-  - Hiscox Conditions
-  - Markel Conditions
-  - Navigators Terms
-  - Kemah Terms
-  - Increase in values
-  - Buy Down
-  - All Risk/DIC
-  - All Risk Premium
-  - DIC Premium
+carrier_entities:
+  - canonical: 'AIG'
+    aliases: ['AIG']
+  - canonical: 'AXA'
+    aliases: ['AXA']
+  - canonical: 'AXIS'
+    aliases:
+      - 'Axis'
+      - 'AXIS'
+  - canonical: 'Alchemy'
+    aliases: ['Alchemy']
+  - canonical: 'Alcor'
+    aliases: ['Alcor']
+  - canonical: 'Allianz'
+    aliases:
+      - 'AGCS'
+      - 'Allianz'
+      - 'Allianz Global Corporate & Specialty'
+  - canonical: 'Allied World'
+    aliases:
+      - 'AWAC'
+      - 'Allied World'
+      - 'Allied World Assurance Co.'
+      - 'Allied World Assurance'
+      - 'Allied World Assurance Company'
+  - canonical: 'Allstate'
+    aliases: ['Allstate']
+  - canonical: 'Amlin'
+    aliases: ['Amlin']
+  - canonical: 'Apollo'
+    aliases: ['Apollo']
+  - canonical: 'Arch'
+    aliases: ['Arch']
+  - canonical: 'Argenta'
+    aliases: ['Argenta']
+  - canonical: 'Argo'
+    aliases: ['Argo']
+  - canonical: 'Ariel Re'
+    aliases: ['Ariel Re']
+  - canonical: 'Arrowhead'
+    aliases: ['Arrowhead']
+  - canonical: 'Ascot'
+    aliases: ['Ascot']
+  - canonical: 'Aspen'
+    aliases: ['Aspen']
+  - canonical: 'Ategrity'
+    aliases: ['Ategrity']
+  - canonical: 'Atrium'
+    aliases: ['Atrium']
+  - canonical: 'Beazley'
+    aliases: ['Beazley']
+  - canonical: 'Berkshire'
+    aliases:
+      - 'BHSI'
+      - 'Berkshire'
+      - 'Berkshire Hathaway Specialty'
+      - 'Berkshire Hathaway Specialty Insurance'
+  - canonical: 'Brit'
+    aliases:
+      - 'BRIT'
+      - 'Brit'
+  - canonical: 'CGM'
+    aliases: ['CGM']
+  - canonical: 'CNA'
+    aliases: ['CNA']
+  - canonical: 'Canopius'
+    aliases:
+      - 'Canopias'
+      - 'Canopius'
+      - 'Canopius US'
+      - 'Canopious US Insurance Inc.'
+      - 'Canopius US Insurance'
+  - canonical: 'Chaucer'
+    aliases: ['Chaucer']
+  - canonical: 'Chubb'
+    aliases:
+      - 'ACE'
+      - 'Chubb'
+      - 'ACE American'
+      - 'Westchester'
+  - canonical: 'Cigna'
+    aliases: ['Cigna']
+  - canonical: 'Colony'
+    aliases: ['Colony']
+  - canonical: 'Columbia Casualty'
+    aliases:
+      - 'Columbia Casualty'
+      - 'Columbia Casualty Co.'
+  - canonical: 'Commonwealth'
+    aliases: ['Commonwealth']
+  - canonical: 'Convex'
+    aliases: ['Convex']
+  - canonical: 'Core Specialty'
+    aliases: ['Core Specialty']
+  - canonical: 'Crum & Forster'
+    aliases:
+      - 'Crum & Forster'
+      - 'Crum and Forster'
+  - canonical: 'Diamond State'
+    aliases: ['Diamond State']
+  - canonical: 'Dellwood'
+    aliases: ['Dellwood']
+  - canonical: 'Emerald Bay'
+    aliases: ['Emerald Bay']
+  - canonical: 'Endurance'
+    aliases: ['Endurance']
+  - canonical: 'Everest'
+    aliases: ['Everest']
+  - canonical: 'Farmers'
+    aliases: ['Farmers']
+  - canonical: 'Fidelis'
+    aliases: ['Fidelis']
+  - canonical: 'Fortegra'
+    aliases: ['Fortegra']
+  - canonical: 'GEICO'
+    aliases: ['GEICO']
+  - canonical: 'GEP'
+    aliases: ['GEP']
+  - canonical: 'Gen Re'
+    aliases:
+      - 'Gen Re'
+      - 'General Re'
+      - 'GenRe'
+  - canonical: 'GenStar'
+    aliases: ['GenStar']
+  - canonical: 'Great American'
+    aliases: ['Great American']
+  - canonical: 'Hallmark'
+    aliases: ['Hallmark']
+  - canonical: 'Hartford'
+    aliases:
+      - 'Hartford'
+      - 'The Hartford'
+  - canonical: 'Helix'
+    aliases: ['Helix']
+  - canonical: 'Hiscox'
+    aliases: ['Hiscox']
+  - canonical: 'Homeland'
+    aliases: ['Homeland']
+  - canonical: 'Hudson'
+    aliases: ['Hudson']
+  - canonical: 'Hannover'
+    aliases:
+      - 'Hannover'
+      - 'Hannover Re'
+  - canonical: 'Intact'
+    aliases: ['Intact']
+  - canonical: 'Ironshore'
+    aliases: ['Ironshore']
+  - canonical: 'JEM'
+    aliases: ['JEM']
+  - canonical: 'James River'
+    aliases: ['James River']
+  - canonical: 'Kemah'
+    aliases: ['Kemah']
+  - canonical: 'Ki'
+    aliases: ['Ki']
+  - canonical: 'Kinsale'
+    aliases: ['Kinsale']
+  - canonical: 'Lancashire'
+    aliases: ['Lancashire']
+  - canonical: 'Landmark'
+    aliases: ['Landmark']
+  - canonical: 'Lexington'
+    aliases: ['Lexington']
+  - canonical: 'Liberty Mutual'
+    aliases: ['Liberty Mutual']
+  - canonical: "Lloyds"
+    aliases:
+      - "Lloyds"
+      - "Lloyd's"
+      - "Lloyd's of London"
+      - "Certain Underwriters"
+      - "Certain Underwriters at Lloyd's"
+      - "Certain Underwriters at Lloyd's, London"
+  - canonical: 'Markel'
+    aliases: ['Markel']
+  - canonical: 'Maxum'
+    aliases: ['Maxum']
+  - canonical: 'MetLife'
+    aliases: ['MetLife']
+  - canonical: 'Mitsui'
+    aliases: ['Mitsui']
+  - canonical: 'Montpelier'
+    aliases: ['Montpelier']
+  - canonical: 'Munich Re'
+    aliases:
+      - 'Munich Re'
+      - 'MunichRe'
+  - canonical: 'NOA'
+    aliases: ['NOA']
+  - canonical: 'Nautilus'
+    aliases: ['Nautilus']
+  - canonical: 'Nationwide'
+    aliases: ['Nationwide']
+  - canonical: 'National Fire & Marine'
+    aliases: ['National Fire & Marine']
+  - canonical: 'Navigators'
+    aliases: ['Navigators']
+  - canonical: 'NEON'
+    aliases: ['NEON']
+  - canonical: 'Obsidian'
+    aliases:
+      - 'Obsidian'
+      - 'Obsidian Specialty Insurance Company'
+  - canonical: 'Ohio Casualty'
+    aliases: ['Ohio Casualty']
+  - canonical: 'One Beacon'
+    aliases: ['One Beacon']
+  - canonical: 'Palms Specialty'
+    aliases: ['Palms Specialty']
+  - canonical: 'Palomar'
+    aliases: ['Palomar']
+  - canonical: 'Partner Re'
+    aliases:
+      - 'Partner Re'
+      - 'PartnerRe'
+      - 'Partner Reinsurance'
+  - canonical: 'Platinum'
+    aliases: ['Platinum']
+  - canonical: 'Pioneer'
+    aliases: ['Pioneer']
+  - canonical: 'Progressive'
+    aliases: ['Progressive']
+  - canonical: 'Prudential'
+    aliases: ['Prudential']
+  - canonical: 'QBE'
+    aliases: ['QBE']
+  - canonical: 'RLI'
+    aliases: ['RLI']
+  - canonical: 'RSUI'
+    aliases: ['RSUI']
+  - canonical: 'Renaissance Re'
+    aliases:
+      - 'RenRe'
+      - 'Renaissance Re'
+      - 'RenaissanceRe'
+  - canonical: 'Risksmith'
+    aliases: ['Risksmith']
+  - canonical: 'SCOR'
+    aliases: ['SCOR']
+  - canonical: 'Scottsdale'
+    aliases: ['Scottsdale']
+  - canonical: 'Seneca'
+    aliases: ['Seneca']
+  - canonical: 'Sompo'
+    aliases: ['Sompo']
+  - canonical: 'Specialty Builders'
+    aliases: ['Specialty Builders']
+  - canonical: 'Starstone'
+    aliases:
+      - 'Starstone'
+      - 'Starstone Specialty'
+      - 'Starstone Specialty Ins. Co.'
+  - canonical: 'State Farm'
+    aliases: ['State Farm']
+  - canonical: 'Starr'
+    aliases:
+      - 'Starr'
+      - 'Starr Surplus Lines Ins. Co.'
+  - canonical: 'Steadfast'
+    aliases: ['Steadfast']
+  - canonical: 'Superior Specialty'
+    aliases: ['Superior Specialty']
+  - canonical: 'Sutton'
+    aliases: ['Sutton']
+  - canonical: 'Swiss Re'
+    aliases:
+      - 'Swiss Re'
+      - 'SwissRe'
+  - canonical: 'Talbot'
+    aliases: ['Talbot']
+  - canonical: 'Tokio Marine'
+    aliases: ['Tokio Marine']
+  - canonical: 'TRU'
+    aliases: ['TRU']
+  - canonical: 'Transatlantic'
+    aliases:
+      - 'Transatlantic'
+      - 'TransRe'
+      - 'Trans Re'
+  - canonical: 'Travelers'
+    aliases: ['Travelers']
+  - canonical: 'United Specialty'
+    aliases: ['United Specialty']
+  - canonical: 'USAA'
+    aliases: ['USAA']
+  - canonical: 'Velocity'
+    aliases: ['Velocity']
+  - canonical: 'Westfield'
+    aliases:
+      - 'Westfield'
+      - 'Westfield Specialty Ins. Co.'
+  - canonical: 'Western World'
+    aliases: ['Western World']
+  - canonical: 'WR Berkley'
+    aliases:
+      - 'Berkley'
+      - 'WR Berkley'
+      - 'W R Berkley'
+      - 'W. R. Berkley'
+      - 'Berkley Specialty'
+      - 'Berkley Insurance'
+  - canonical: 'XL'
+    aliases:
+      - 'XL'
+      - 'AXA XL'
+      - 'XL Catlin'
+      - 'Catlin'
+      - 'XL E&S'
+  - canonical: 'Zurich'
+    aliases: ['Zurich']

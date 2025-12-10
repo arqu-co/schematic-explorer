@@ -95,6 +95,8 @@ def get_carrier_data() -> CarrierData:
 
     Returns immutable CarrierData with frozensets for known carriers
     and non-carriers. Uses functools.cache for automatic memoization.
+
+    Supports both old format (flat lists) and new format (carrier_entities).
     """
     known_carriers: frozenset[str] = frozenset()
     non_carriers: frozenset[str] = frozenset()
@@ -102,12 +104,34 @@ def get_carrier_data() -> CarrierData:
     if _CARRIERS_FILE.exists():
         with open(_CARRIERS_FILE, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        known_carriers = frozenset(
-            _normalize_for_match(c) for c in data.get("carriers", [])
-        )
-        non_carriers = frozenset(
-            _normalize_for_match(c) for c in data.get("non_carriers", [])
-        )
+
+        # Check if using new format (has carrier_entities)
+        if "carrier_entities" in data:
+            # New format: extract all aliases from carrier_entities
+            all_aliases = []
+            for entity in data.get("carrier_entities", []):
+                all_aliases.extend(entity.get("aliases", []))
+            known_carriers = frozenset(
+                _normalize_for_match(c) for c in all_aliases
+            )
+
+            # Non-carriers from both structural_labels and brokers_wholesalers
+            non_carriers_config = data.get("non_carriers", {})
+            all_non_carriers = (
+                non_carriers_config.get("structural_labels", [])
+                + non_carriers_config.get("brokers_wholesalers", [])
+            )
+            non_carriers = frozenset(
+                _normalize_for_match(c) for c in all_non_carriers
+            )
+        else:
+            # Old format: flat carriers and non_carriers lists
+            known_carriers = frozenset(
+                _normalize_for_match(c) for c in data.get("carriers", [])
+            )
+            non_carriers = frozenset(
+                _normalize_for_match(c) for c in data.get("non_carriers", [])
+            )
 
     return CarrierData(known_carriers=known_carriers, non_carriers=non_carriers)
 
