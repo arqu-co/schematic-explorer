@@ -100,29 +100,43 @@ html, body, #root {
 }
 
 .excel-viewer {
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   font-size: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
-.excel-viewer table {
-  border-collapse: collapse;
+/* Virtual scrolling container */
+.excel-virtual-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  min-height: 0;
 }
 
-.excel-viewer td,
-.excel-viewer th {
+.excel-virtual-content {
+  position: relative;
+}
+
+/* Cell styles */
+.excel-cell {
   border: 1px solid var(--gray-6);
   padding: 4px 8px;
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--color-background);
+  box-sizing: border-box;
 }
 
-.excel-viewer th {
-  background: var(--gray-a3);
-  font-weight: 600;
+.excel-cell.merged-cell {
+  color: var(--gray-8);
+  background: var(--gray-2);
 }
 
-/* Row and column headers (A, B, C... and 1, 2, 3...) */
-.excel-viewer .excel-header-row th,
+/* Row and column headers */
 .excel-viewer .excel-row-header,
 .excel-viewer .excel-col-header,
 .excel-viewer .excel-corner-cell {
@@ -130,44 +144,28 @@ html, body, #root {
   color: var(--gray-11);
   font-weight: 500;
   text-align: center;
-  min-width: 30px;
-  position: sticky;
-  z-index: 1;
+  border: 1px solid var(--gray-6);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.excel-viewer .excel-header-row {
-  position: sticky;
-  top: 0;
+.excel-viewer .excel-col-header {
+  position: relative;
+  user-select: none;
   z-index: 2;
 }
 
 .excel-viewer .excel-row-header {
-  position: sticky;
-  left: 0;
+  z-index: 2;
 }
 
 .excel-viewer .excel-corner-cell {
-  position: sticky;
-  top: 0;
-  left: 0;
   z-index: 3;
 }
 
-.excel-viewer .merged-cell {
-  color: var(--gray-8);
-  background: var(--gray-2);
-}
-
-.excel-viewer tr:hover td {
-  background: var(--gray-a2);
-}
-
 /* Column resize and hide controls */
-.excel-viewer .excel-col-header {
-  position: relative;
-  user-select: none;
-}
-
 .excel-viewer .col-resize-handle {
   position: absolute;
   right: 0;
