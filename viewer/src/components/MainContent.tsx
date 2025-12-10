@@ -23,6 +23,21 @@ interface TowerVisualizationProps {
   onCellClick?: (entry: CarrierEntry) => void;
 }
 
+/**
+ * Generate a background color based on participation percentage.
+ * Higher participation = brighter/more saturated blue.
+ * Lower participation = duller/grayer color.
+ */
+function getParticipationColor(pct: number | null | undefined): string {
+  if (!pct) return 'var(--accent-3)';
+  // Clamp between 0 and 1
+  const normalized = Math.min(1, Math.max(0, pct));
+  // Map to HSL: hue=210 (blue), saturation 20-70%, lightness 30-50%
+  const saturation = 20 + normalized * 50; // 20% to 70%
+  const lightness = 50 - normalized * 20; // 50% down to 30% (brighter = darker background for contrast)
+  return `hsl(210, ${saturation}%, ${lightness}%)`;
+}
+
 function TowerVisualization({ layers, onCellClick }: TowerVisualizationProps) {
   return (
     <Box className="tower-viz">
@@ -48,43 +63,48 @@ function TowerVisualization({ layers, onCellClick }: TowerVisualizationProps) {
             )}
           </Flex>
           <Flex gap="2" wrap="wrap" className="layer-carriers">
-            {layer.entries.map((entry, entryIdx) => (
-              <Box
-                key={entryIdx}
-                className="carrier-block"
-                style={{
-                  backgroundColor: entry.fill_color ? hexToRgba(entry.fill_color, 0.5) : 'var(--accent-3)',
-                  flex: entry.participation_pct ? `${entry.participation_pct * 100}` : '1',
-                  minWidth: '120px',
-                  cursor: onCellClick ? 'pointer' : 'default',
-                }}
-                onClick={() => onCellClick?.(entry)}
-              >
-                <Text size="2" weight="medium" className="carrier-name">
-                  {entry.carrier}
-                </Text>
-                <Flex gap="3" wrap="wrap" mt="1">
-                  {entry.participation_pct && (
-                    <Text size="1" color="gray">
-                      {formatPercent(entry.participation_pct)}
-                    </Text>
-                  )}
-                  {entry.premium && (
-                    <Text size="1" color="gray">
-                      {formatCurrency(entry.premium)}
-                    </Text>
-                  )}
-                  {entry.attachment_point && (
-                    <Text size="1" color="gray">
-                      xs {entry.attachment_point}
-                    </Text>
-                  )}
-                </Flex>
-                <Text size="1" color="gray" style={{ opacity: 0.6 }}>
-                  {entry.excel_range}
-                </Text>
-              </Box>
-            ))}
+            {layer.entries.map((entry, entryIdx) => {
+              const bgColor = entry.fill_color
+                ? hexToRgba(entry.fill_color, 0.5)
+                : getParticipationColor(entry.participation_pct);
+              return (
+                <Box
+                  key={entryIdx}
+                  className="carrier-block"
+                  style={{
+                    backgroundColor: bgColor,
+                    flex: entry.participation_pct ? `${entry.participation_pct * 100}` : '1',
+                    minWidth: '120px',
+                    cursor: onCellClick ? 'pointer' : 'default',
+                  }}
+                  onClick={() => onCellClick?.(entry)}
+                >
+                  <Text size="2" weight="medium" className="carrier-name">
+                    {entry.carrier}
+                  </Text>
+                  <Flex gap="3" wrap="wrap" mt="1">
+                    {entry.participation_pct && (
+                      <Text size="1" color="gray">
+                        {formatPercent(entry.participation_pct)}
+                      </Text>
+                    )}
+                    {entry.premium && (
+                      <Text size="1" color="gray">
+                        {formatCurrency(entry.premium)}
+                      </Text>
+                    )}
+                    {entry.attachment_point && (
+                      <Text size="1" color="gray">
+                        xs {entry.attachment_point}
+                      </Text>
+                    )}
+                  </Flex>
+                  <Text size="1" color="gray" style={{ opacity: 0.6 }}>
+                    {entry.excel_range}
+                  </Text>
+                </Box>
+              );
+            })}
           </Flex>
         </Box>
       ))}

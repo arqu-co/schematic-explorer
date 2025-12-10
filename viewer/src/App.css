@@ -36,6 +36,7 @@ html, body, #root {
 }
 
 .main-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -331,6 +332,10 @@ html, body, #root {
 .insights-content th {
   background: var(--gray-a3);
   font-weight: 600;
+}
+
+.tower-viz {
+  width: 100%;
 }
 
 .tower-layer {
