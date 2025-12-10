@@ -154,11 +154,29 @@ GENERATION_CONFIG = {
 
 
 def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
-    """Convert Excel file to text representation for Gemini."""
+    """Convert Excel file to text representation for Gemini.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is invalid or sheet name not found
+    """
     import openpyxl
     from openpyxl.utils import get_column_letter
+    from openpyxl.utils.exceptions import InvalidFileException
 
-    wb = openpyxl.load_workbook(filepath, data_only=True)
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+
+    try:
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+    except InvalidFileException as e:
+        raise ValueError(f"Invalid or corrupted Excel file: {filepath}") from e
+
+    if sheet_name and sheet_name not in wb.sheetnames:
+        available = ", ".join(wb.sheetnames)
+        raise ValueError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
+
     ws = wb[sheet_name] if sheet_name else wb.active
 
     lines = [f"Excel File: {Path(filepath).name}"]
