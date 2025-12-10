@@ -107,31 +107,28 @@ html, body, #root {
   min-height: 0;
 }
 
-/* Virtual scrolling container */
-.excel-virtual-container {
+/* Scroll container */
+.excel-scroll-container {
   flex: 1;
   overflow: auto;
-  position: relative;
   min-height: 0;
 }
 
-.excel-virtual-content {
-  position: relative;
+/* Table styles */
+.excel-table {
+  border-collapse: collapse;
+  table-layout: auto;
 }
 
-/* Cell styles */
-.excel-cell {
+.excel-table td,
+.excel-table th {
   border: 1px solid var(--gray-6);
   padding: 4px 8px;
   text-align: left;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--color-background);
-  box-sizing: border-box;
 }
 
-.excel-cell.merged-cell {
+.excel-table td.merged-cell {
   color: var(--gray-8);
   background: var(--gray-2);
 }
@@ -144,25 +141,29 @@ html, body, #root {
   color: var(--gray-11);
   font-weight: 500;
   text-align: center;
-  border: 1px solid var(--gray-6);
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: sticky;
 }
 
 .excel-viewer .excel-col-header {
-  position: relative;
-  user-select: none;
+  top: 0;
   z-index: 2;
+  position: sticky;
+  user-select: none;
 }
 
 .excel-viewer .excel-row-header {
-  z-index: 2;
+  left: 0;
+  z-index: 1;
+  position: sticky;
+  min-width: 40px;
 }
 
 .excel-viewer .excel-corner-cell {
+  top: 0;
+  left: 0;
   z-index: 3;
+  position: sticky;
+  min-width: 40px;
 }
 
 /* Column resize and hide controls */

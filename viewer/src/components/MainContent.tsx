@@ -215,14 +215,6 @@ function buildCellGrid(sheet: XLSX.WorkSheet): { value: string; isMerged: boolea
   return grid;
 }
 
-// Virtual scrolling constants
-const ROW_HEIGHT = 26;
-const COL_WIDTH = 80;
-const ROW_HEADER_WIDTH = 50;
-const COL_HEADER_HEIGHT = 30;
-const BUFFER_ROWS = 5;
-const BUFFER_COLS = 3;
-
 function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   const [grid, setGrid] = useState<{ value: string; isMerged: boolean; isOrigin: boolean }[][] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,8 +223,6 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
   const [colWidths, setColWidths] = useState<Map<number, number>>(new Map());
   const [resizingCol, setResizingCol] = useState<number | null>(null);
-  const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 });
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
@@ -252,7 +242,6 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
         setHiddenCols(new Set());
         setHiddenRows(new Set());
         setColWidths(new Map());
-        setScrollPos({ top: 0, left: 0 });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Excel');
       } finally {
@@ -261,22 +250,6 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     }
     loadExcel();
   }, [stem]);
-
-  // Observe container size
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
 
   // Mouse move handler for column resizing
   useEffect(() => {
@@ -305,67 +278,6 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     };
   }, [resizingCol]);
 
-  // Build visible row/col indices (excluding hidden)
-  const visibleRows = React.useMemo(() => {
-    if (!grid) return [];
-    return grid.map((_, i) => i).filter((i) => !hiddenRows.has(i));
-  }, [grid, hiddenRows]);
-
-  const visibleCols = React.useMemo(() => {
-    if (!grid || grid.length === 0) return [];
-    return grid[0].map((_, i) => i).filter((i) => !hiddenCols.has(i));
-  }, [grid, hiddenCols]);
-
-  // Calculate column positions
-  const colPositions = React.useMemo(() => {
-    const positions: number[] = [];
-    let x = 0;
-    for (const colIdx of visibleCols) {
-      positions.push(x);
-      x += colWidths.get(colIdx) ?? COL_WIDTH;
-    }
-    positions.push(x); // Total width at end
-    return positions;
-  }, [visibleCols, colWidths]);
-
-  const totalWidth = colPositions[colPositions.length - 1] ?? 0;
-  const totalHeight = visibleRows.length * ROW_HEIGHT;
-
-  // Calculate visible range based on scroll position
-  const getVisibleRange = React.useCallback(() => {
-    const viewTop = scrollPos.top;
-    const viewBottom = scrollPos.top + containerSize.height - COL_HEADER_HEIGHT;
-    const viewLeft = scrollPos.left;
-    const viewRight = scrollPos.left + containerSize.width - ROW_HEADER_WIDTH;
-
-    // Find row range
-    const startRowIdx = Math.max(0, Math.floor(viewTop / ROW_HEIGHT) - BUFFER_ROWS);
-    const endRowIdx = Math.min(visibleRows.length - 1, Math.ceil(viewBottom / ROW_HEIGHT) + BUFFER_ROWS);
-
-    // Find column range using binary search
-    let startColIdx = 0;
-    let endColIdx = visibleCols.length - 1;
-    for (let i = 0; i < colPositions.length - 1; i++) {
-      if (colPositions[i + 1] >= viewLeft) {
-        startColIdx = Math.max(0, i - BUFFER_COLS);
-        break;
-      }
-    }
-    for (let i = colPositions.length - 2; i >= 0; i--) {
-      if (colPositions[i] <= viewRight) {
-        endColIdx = Math.min(visibleCols.length - 1, i + BUFFER_COLS);
-        break;
-      }
-    }
-
-    return { startRowIdx, endRowIdx, startColIdx, endColIdx };
-  }, [scrollPos, containerSize, visibleRows.length, visibleCols.length, colPositions]);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    setScrollPos({ top: target.scrollTop, left: target.scrollLeft });
-  };
-
   // Scroll to highlighted range
   useEffect(() => {
     if (!containerRef.current || !highlightRange || !grid) return;
@@ -375,27 +287,23 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
 
     const { startRow, startCol } = parsed;
 
-    // Find visual indices
-    const visualRowIdx = visibleRows.indexOf(startRow);
-    const visualColIdx = visibleCols.indexOf(startCol);
-    if (visualRowIdx === -1 || visualColIdx === -1) return;
+    // Find the cell by data attributes
+    const cell = containerRef.current.querySelector(
+      `[data-row="${startRow}"][data-col="${startCol}"]`
+    ) as HTMLElement;
 
-    const targetTop = visualRowIdx * ROW_HEIGHT;
-    const targetLeft = colPositions[visualColIdx] ?? 0;
-
-    containerRef.current.scrollTo({
-      top: Math.max(0, targetTop - containerSize.height / 2 + ROW_HEIGHT),
-      left: Math.max(0, targetLeft - containerSize.width / 2 + COL_WIDTH),
-      behavior: 'smooth',
-    });
-  }, [highlightRange, grid, visibleRows, visibleCols, colPositions, containerSize]);
+    if (cell) {
+      cell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+  }, [highlightRange, grid]);
 
   const handleResizeStart = (colIdx: number, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setResizingCol(colIdx);
     startXRef.current = e.clientX;
-    startWidthRef.current = colWidths.get(colIdx) ?? COL_WIDTH;
+    const th = e.currentTarget.parentElement as HTMLElement;
+    startWidthRef.current = th.offsetWidth;
   };
 
   const toggleColumnHidden = (colIdx: number) => {
@@ -453,8 +361,10 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   if (error) return <Text color="red">{error}</Text>;
   if (!grid || grid.length === 0) return <Text color="gray">No data</Text>;
 
+  const numCols = grid[0]?.length || 0;
   const hasHidden = hiddenCols.size > 0 || hiddenRows.size > 0;
-  const { startRowIdx, endRowIdx, startColIdx, endColIdx } = getVisibleRange();
+  const visibleRowCount = grid.length - hiddenRows.size;
+  const visibleColCount = numCols - hiddenCols.size;
 
   // Parse highlight range for cell highlighting
   const highlightParsed = highlightRange ? parseRange(highlightRange) : null;
@@ -488,124 +398,70 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
           </>
         )}
         <Text size="1" color="gray" style={{ marginLeft: 'auto' }}>
-          {visibleRows.length} × {visibleCols.length}
+          {visibleRowCount} × {visibleColCount}
         </Text>
       </Flex>
 
-      <div
-        ref={containerRef}
-        className="excel-virtual-container"
-        onScroll={handleScroll}
-      >
-        {/* Total scrollable area */}
-        <div
-          className="excel-virtual-content"
-          style={{
-            width: totalWidth + ROW_HEADER_WIDTH,
-            height: totalHeight + COL_HEADER_HEIGHT,
-          }}
-        >
-          {/* Corner cell (sticky) */}
-          <div
-            className="excel-corner-cell"
-            style={{
-              position: 'sticky',
-              top: 0,
-              left: 0,
-              width: ROW_HEADER_WIDTH,
-              height: COL_HEADER_HEIGHT,
-              zIndex: 3,
-            }}
-          />
-
-          {/* Column headers (sticky top) */}
-          {visibleCols.slice(startColIdx, endColIdx + 1).map((colIdx, i) => {
-            const visualIdx = startColIdx + i;
-            const left = colPositions[visualIdx] + ROW_HEADER_WIDTH;
-            const width = colWidths.get(colIdx) ?? COL_WIDTH;
-            return (
-              <div
-                key={`col-${colIdx}`}
-                className="excel-col-header"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left,
-                  width,
-                  height: COL_HEADER_HEIGHT,
-                  transform: `translateY(${scrollPos.top}px)`,
-                }}
-              >
-                <Flex align="center" justify="between" gap="1" style={{ height: '100%', padding: '0 4px' }}>
-                  <span>{numToCol(colIdx + 1)}</span>
-                  <button
-                    className="col-hide-btn"
-                    onClick={() => toggleColumnHidden(colIdx)}
-                    title={`Hide column ${numToCol(colIdx + 1)}`}
+      <div ref={containerRef} className="excel-scroll-container">
+        <table className="excel-table">
+          <thead>
+            <tr>
+              <th className="excel-corner-cell"></th>
+              {Array.from({ length: numCols }, (_, c) => {
+                if (hiddenCols.has(c)) return null;
+                const width = colWidths.get(c);
+                return (
+                  <th
+                    key={c}
+                    className="excel-col-header"
+                    style={width ? { width, minWidth: width } : undefined}
                   >
-                    ×
-                  </button>
-                </Flex>
-                <div
-                  className="col-resize-handle"
-                  onMouseDown={(e) => handleResizeStart(colIdx, e)}
-                />
-              </div>
-            );
-          })}
-
-          {/* Row headers (sticky left) */}
-          {visibleRows.slice(startRowIdx, endRowIdx + 1).map((rowIdx, i) => {
-            const visualIdx = startRowIdx + i;
-            const top = visualIdx * ROW_HEIGHT + COL_HEADER_HEIGHT;
-            return (
-              <div
-                key={`row-${rowIdx}`}
-                className="excel-row-header"
-                style={{
-                  position: 'absolute',
-                  top,
-                  left: 0,
-                  width: ROW_HEADER_WIDTH,
-                  height: ROW_HEIGHT,
-                  transform: `translateX(${scrollPos.left}px)`,
-                }}
-              >
-                {rowIdx + 1}
-              </div>
-            );
-          })}
-
-          {/* Data cells */}
-          {visibleRows.slice(startRowIdx, endRowIdx + 1).map((rowIdx, ri) => {
-            const visualRowIdx = startRowIdx + ri;
-            const top = visualRowIdx * ROW_HEIGHT + COL_HEADER_HEIGHT;
-
-            return visibleCols.slice(startColIdx, endColIdx + 1).map((colIdx, ci) => {
-              const visualColIdx = startColIdx + ci;
-              const left = colPositions[visualColIdx] + ROW_HEADER_WIDTH;
-              const width = colWidths.get(colIdx) ?? COL_WIDTH;
-              const cell = grid[rowIdx][colIdx];
-              const highlighted = isHighlighted(rowIdx, colIdx);
-
+                    <Flex align="center" justify="between" gap="1">
+                      <span>{numToCol(c + 1)}</span>
+                      <button
+                        className="col-hide-btn"
+                        onClick={() => toggleColumnHidden(c)}
+                        title={`Hide column ${numToCol(c + 1)}`}
+                      >
+                        ×
+                      </button>
+                    </Flex>
+                    <div
+                      className="col-resize-handle"
+                      onMouseDown={(e) => handleResizeStart(c, e)}
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {grid.map((row, rowIdx) => {
+              if (hiddenRows.has(rowIdx)) return null;
               return (
-                <div
-                  key={`${rowIdx}-${colIdx}`}
-                  className={`excel-cell ${cell.isMerged ? 'merged-cell' : ''} ${highlighted ? 'cell-highlight' : ''}`}
-                  style={{
-                    position: 'absolute',
-                    top,
-                    left,
-                    width,
-                    height: ROW_HEIGHT,
-                  }}
-                >
-                  {cell.value}
-                </div>
+                <tr key={rowIdx}>
+                  <th className="excel-row-header">{rowIdx + 1}</th>
+                  {row.map((cell, colIdx) => {
+                    if (hiddenCols.has(colIdx)) return null;
+                    const width = colWidths.get(colIdx);
+                    const highlighted = isHighlighted(rowIdx, colIdx);
+                    return (
+                      <td
+                        key={colIdx}
+                        data-row={rowIdx}
+                        data-col={colIdx}
+                        className={`${cell.isMerged ? 'merged-cell' : ''} ${highlighted ? 'cell-highlight' : ''}`}
+                        style={width ? { width, minWidth: width } : undefined}
+                      >
+                        {cell.value}
+                      </td>
+                    );
+                  })}
+                </tr>
               );
-            });
-          })}
-        </div>
+            })}
+          </tbody>
+        </table>
       </div>
     </Box>
   );
