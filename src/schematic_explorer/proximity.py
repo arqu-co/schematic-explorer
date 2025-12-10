@@ -8,9 +8,13 @@ This module handles spatial proximity logic:
 """
 
 import re
+from typing import TYPE_CHECKING
 
 from .blocks import PERCENTAGE_WHOLE_NUMBER_THRESHOLD, Block
 from .types import SummaryColumnInfo
+
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
 # =============================================================================
 # Constants
@@ -94,7 +98,7 @@ def is_block_relevant(
 # =============================================================================
 
 
-def _check_adjacent_summary_columns(ws, row: int, start_col: int, result: dict) -> None:
+def _check_adjacent_summary_columns(ws: "Worksheet", row: int, start_col: int, result: dict) -> None:
     """Check columns adjacent to year-prefixed layer premium for related summary data."""
     for extra_col in range(start_col + 1, min(start_col + 5, ws.max_column + 1)):
         extra_val = ws.cell(row=row, column=extra_col).value
@@ -126,7 +130,7 @@ def _classify_summary_column(val_lower: str, col: int, result: dict) -> None:
             break
 
 
-def detect_summary_columns(ws) -> SummaryColumnInfo:
+def detect_summary_columns(ws: "Worksheet") -> SummaryColumnInfo:
     """Detect columns that contain summary/aggregate data rather than per-carrier data.
 
     These columns typically have headers like:
@@ -139,11 +143,15 @@ def detect_summary_columns(ws) -> SummaryColumnInfo:
         SummaryColumnInfo with detected column information
     """
     # Use internal dict for building, convert to dataclass at end
-    result = {
-        "columns": set(),
-        "bound_premium_col": None,
-        "layer_target_col": None,
-        "layer_rate_col": None,
+    columns: set[int] = set()
+    bound_premium_col: int | None = None
+    layer_target_col: int | None = None
+    layer_rate_col: int | None = None
+    result: dict = {
+        "columns": columns,
+        "bound_premium_col": bound_premium_col,
+        "layer_target_col": layer_target_col,
+        "layer_rate_col": layer_rate_col,
     }
 
     # Scan header rows for summary column indicators

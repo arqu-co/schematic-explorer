@@ -1,14 +1,18 @@
 """Excel and data formatting utilities for verification."""
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..types import CarrierEntry
+
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
 # Merged cell display limit (in Excel-to-text conversion)
 MAX_MERGED_CELLS_DISPLAY = 20
 
 
-def load_workbook_for_verification(filepath: str, sheet_name: str | None = None):
+def load_workbook_for_verification(filepath: str, sheet_name: str | None = None) -> tuple["Worksheet", str]:
     """Load workbook and return worksheet for verification.
 
     Args:
@@ -42,7 +46,7 @@ def load_workbook_for_verification(filepath: str, sheet_name: str | None = None)
     return ws, path.name
 
 
-def format_cell_rows(ws) -> list[str]:
+def format_cell_rows(ws: "Worksheet") -> list[str]:
     """Format worksheet cell contents as text lines.
 
     Args:
@@ -67,7 +71,7 @@ def format_cell_rows(ws) -> list[str]:
     return lines
 
 
-def format_merged_cells(ws) -> list[str]:
+def format_merged_cells(ws: "Worksheet") -> list[str]:
     """Format merged cell information as text lines.
 
     Args:

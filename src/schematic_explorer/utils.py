@@ -1,11 +1,14 @@
 """Utility functions for Excel cell operations."""
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openpyxl.utils import range_boundaries
 
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
-def build_merged_cell_map(ws) -> dict[tuple[int, int], str]:
+
+def build_merged_cell_map(ws: "Worksheet") -> dict[tuple[int, int], str]:
     """Pre-build a map of (row, col) -> merged_range_string for O(1) lookups.
 
     This is much more efficient than iterating through all merged ranges
@@ -28,7 +31,7 @@ def build_merged_cell_map(ws) -> dict[tuple[int, int], str]:
 
 
 def find_merged_range_at(
-    ws, row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
+    ws: "Worksheet", row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
 ) -> str | None:
     """Find if a cell is part of a merged range, return the range string.
 
@@ -52,7 +55,7 @@ def find_merged_range_at(
 
 
 def get_cell_value(
-    ws, row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
+    ws: "Worksheet", row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
 ) -> Any:
     """Get cell value, handling merged cells (value is in top-left).
 
@@ -70,7 +73,7 @@ def get_cell_value(
 
 
 def get_cell_color(
-    ws, row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
+    ws: "Worksheet", row: int, col: int, merged_map: dict[tuple[int, int], str] | None = None
 ) -> str | None:
     """Get background color of a cell as hex string.
 
