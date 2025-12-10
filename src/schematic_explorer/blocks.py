@@ -216,10 +216,16 @@ def _infer_type(value: Any) -> TypeInferenceResult:
         return "label", 0.7
 
     # Very short strings (1-3 chars) are unlikely to be carrier names
+    # Note: _is_known_carrier now supports context for short-alias gating,
+    # but we don't have context available here. Short aliases (<=5 chars)
+    # will only match if they're known carriers AND context keywords are present.
+    # Since we don't pass context here, very short known carriers may not match.
     if len(val) <= 3 and not _is_known_carrier(val):
         return "label", 0.6
 
     # Check against known carrier names (from YAML) - fuzzy match
+    # Context-aware matching is available but not used here yet.
+    # Future: Pass nearby cell values as context for short-alias gating.
     if _is_known_carrier(val):
         return "carrier", 0.9
 

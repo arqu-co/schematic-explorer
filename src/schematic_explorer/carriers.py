@@ -136,8 +136,22 @@ def get_carrier_data() -> CarrierData:
     return CarrierData(known_carriers=known_carriers, non_carriers=non_carriers)
 
 
-def _is_known_carrier(value: str) -> bool:
-    """Check if value matches a known carrier (fuzzy match)."""
+def _is_known_carrier(value: str, context: str = "") -> bool:
+    """Check if value matches a known carrier (fuzzy match).
+
+    Uses the new CarrierMatcher for matching if available, with context-aware
+    short alias gating. Falls back to legacy matching for backward compatibility.
+
+    Args:
+        value: Text to check for carrier match
+        context: Optional surrounding text for short-alias gating (e.g., nearby cell values)
+    """
+    # Try using the new CarrierMatcher first (supports context-aware gating)
+    matcher = get_carrier_matcher()
+    if matcher.match_carrier(value, context_text=context) is not None:
+        return True
+
+    # Legacy fallback: use old CarrierData-based matching
     data = get_carrier_data()
     normalized = _normalize_for_match(value)
 
