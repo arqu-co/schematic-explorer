@@ -13,9 +13,9 @@ from schematic_explorer.blocks import Block, _infer_type, classify_blocks
 from schematic_explorer.carriers import (
     _is_known_carrier,
     _is_non_carrier,
-    _load_carriers,
     _looks_like_policy_number,
     _normalize_for_match,
+    get_carrier_data,
 )
 
 # Import from extractor
@@ -93,17 +93,14 @@ class TestNormalizeForMatch:
         assert _normalize_for_match("  Test  ") == "test"
 
 
-class TestLoadCarriers:
-    """Tests for _load_carriers function."""
+class TestGetCarrierData:
+    """Tests for get_carrier_data function."""
 
     def test_carriers_loaded(self):
         """Test that carriers are loaded from YAML."""
-        _load_carriers()
+        data = get_carrier_data()
         # Should have some known carriers loaded
-        # Re-import to get the current state (after autouse fixture cleared it)
-        from schematic_explorer.carriers import _KNOWN_CARRIERS as loaded_carriers
-
-        assert len(loaded_carriers) > 0
+        assert len(data.known_carriers) > 0
 
 
 class TestIsKnownCarrier:
@@ -692,7 +689,6 @@ class TestIsKnownCarrierAdditional:
     def test_carrier_substring_match(self):
         """Test substring matching of carriers."""
         # Test that a known carrier contained in value is matched
-        _load_carriers()
         # "Chubb Bermuda" should match because it contains "Chubb"
         result = _is_known_carrier("Chubb Bermuda")
         # Result depends on carriers.yml content

@@ -8,6 +8,8 @@ This module handles carrier name identification, including:
 """
 
 import re
+from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 import yaml
@@ -62,12 +64,21 @@ MIN_CARRIER_NAME_LENGTH = 3
 MAX_CARRIER_NAME_LENGTH = 100
 
 # =============================================================================
-# Carrier Data (loaded from YAML)
+# Carrier Data (immutable, lazy-loaded)
 # =============================================================================
 
 _CARRIERS_FILE = Path(__file__).parent / "carriers.yml"
-_KNOWN_CARRIERS: set[str] = set()
-_NON_CARRIERS: set[str] = set()
+
+
+@dataclass(frozen=True)
+class CarrierData:
+    """Immutable container for carrier matching data.
+
+    Uses frozensets for thread safety and immutability.
+    """
+
+    known_carriers: frozenset[str]
+    non_carriers: frozenset[str]
 
 
 def _normalize_for_match(s: str) -> str:
@@ -75,31 +86,41 @@ def _normalize_for_match(s: str) -> str:
     return re.sub(r"[^a-z0-9\s]", "", s.lower()).strip()
 
 
-def _load_carriers() -> None:
-    """Load carrier lists from YAML file."""
-    global _KNOWN_CARRIERS, _NON_CARRIERS
-    if _KNOWN_CARRIERS:  # Already loaded
-        return
+@cache
+def get_carrier_data() -> CarrierData:
+    """Load carrier data from YAML file (cached, thread-safe).
+
+    Returns immutable CarrierData with frozensets for known carriers
+    and non-carriers. Uses functools.cache for automatic memoization.
+    """
+    known_carriers: frozenset[str] = frozenset()
+    non_carriers: frozenset[str] = frozenset()
 
     if _CARRIERS_FILE.exists():
         with open(_CARRIERS_FILE, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        _KNOWN_CARRIERS = {_normalize_for_match(c) for c in data.get("carriers", [])}
-        _NON_CARRIERS = {_normalize_for_match(c) for c in data.get("non_carriers", [])}
+        known_carriers = frozenset(
+            _normalize_for_match(c) for c in data.get("carriers", [])
+        )
+        non_carriers = frozenset(
+            _normalize_for_match(c) for c in data.get("non_carriers", [])
+        )
+
+    return CarrierData(known_carriers=known_carriers, non_carriers=non_carriers)
 
 
 def _is_known_carrier(value: str) -> bool:
     """Check if value matches a known carrier (fuzzy match)."""
-    _load_carriers()
+    data = get_carrier_data()
     normalized = _normalize_for_match(value)
 
     # Direct match
-    if normalized in _KNOWN_CARRIERS:
+    if normalized in data.known_carriers:
         return True
 
     # Check if any known carrier is contained in the value
     # e.g., "Chubb Bermuda" contains "chubb"
-    for carrier in _KNOWN_CARRIERS:
+    for carrier in data.known_carriers:
         if carrier in normalized or normalized in carrier:
             return True
 
@@ -116,18 +137,18 @@ def _is_known_carrier(value: str) -> bool:
 
 def _is_non_carrier(value: str) -> bool:
     """Check if value matches a known non-carrier term."""
-    _load_carriers()
+    data = get_carrier_data()
     normalized = _normalize_for_match(value)
 
     # Direct match only - don't do substring matching on non-carrier terms
     # This prevents "Chubb Bermuda" from matching "Bermuda"
     # and "London - Fidelis" from matching "London"
-    if normalized in _NON_CARRIERS:
+    if normalized in data.non_carriers:
         return True
 
     # For compound non-carrier terms (like "RT Layer"), check if value starts with them
     # But ONLY for multi-word non-carrier terms to avoid blocking "London - Fidelis"
-    for term in _NON_CARRIERS:
+    for term in data.non_carriers:
         # Only do prefix matching for multi-word terms
         if " " in term and normalized.startswith(term + " "):
             return True

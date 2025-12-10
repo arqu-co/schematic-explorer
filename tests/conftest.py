@@ -10,14 +10,12 @@ def reset_carrier_cache():
     This ensures tests are isolated and don't depend on
     carrier loading state from other tests.
     """
-    from schematic_explorer.carriers import _KNOWN_CARRIERS, _NON_CARRIERS
+    from schematic_explorer.carriers import get_carrier_data
 
-    # Clear the cache before each test
-    _KNOWN_CARRIERS.clear()
-    _NON_CARRIERS.clear()
+    # Clear the functools.cache before each test
+    get_carrier_data.cache_clear()
 
     yield
 
     # Clear again after test
-    _KNOWN_CARRIERS.clear()
-    _NON_CARRIERS.clear()
+    get_carrier_data.cache_clear()
