@@ -220,6 +220,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hiddenCols, setHiddenCols] = useState<Set<number>>(new Set());
+  const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
   const [colWidths, setColWidths] = useState<Map<number, number>>(new Map());
   const [resizingCol, setResizingCol] = useState<number | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -239,6 +240,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
         const cellGrid = buildCellGrid(firstSheet);
         setGrid(cellGrid);
         setHiddenCols(new Set());
+        setHiddenRows(new Set());
         setColWidths(new Map());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Excel');
@@ -290,18 +292,24 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
 
     const { startCol, startRow, endCol, endRow } = parsed;
 
-    // Find and highlight cells (accounting for header row/col and hidden columns)
+    // Find and highlight cells (accounting for hidden rows/cols)
     let firstHighlighted: Element | null = null;
     for (let r = startRow; r <= endRow; r++) {
+      if (hiddenRows.has(r)) continue;
       for (let c = startCol; c <= endCol; c++) {
         if (hiddenCols.has(c)) continue;
+        // Calculate visual row index accounting for hidden rows
+        let visualRow = 2; // Start at 2 for header row (1-indexed nth-child)
+        for (let i = 0; i <= r; i++) {
+          if (!hiddenRows.has(i)) visualRow++;
+        }
         // Calculate visual column index accounting for hidden columns
         let visualCol = 1; // Start at 1 for row number column
         for (let i = 0; i <= c; i++) {
           if (!hiddenCols.has(i)) visualCol++;
         }
         const cell = tableRef.current.querySelector(
-          `tr:nth-child(${r + 2}) > *:nth-child(${visualCol})`
+          `tr:nth-child(${visualRow}) > *:nth-child(${visualCol})`
         ) as HTMLElement;
         if (cell) {
           cell.classList.add('cell-highlight');
@@ -313,7 +321,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     if (firstHighlighted) {
       firstHighlighted.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }
-  }, [highlightRange, grid, hiddenCols]);
+  }, [highlightRange, grid, hiddenCols, hiddenRows]);
 
   const handleResizeStart = (colIdx: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -336,8 +344,45 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     });
   };
 
-  const showAllColumns = () => {
+  const showAll = () => {
     setHiddenCols(new Set());
+    setHiddenRows(new Set());
+  };
+
+  const hideEmptyRowsAndCols = () => {
+    if (!grid) return;
+
+    const numRows = grid.length;
+    const numCols = grid[0]?.length || 0;
+
+    // Find empty columns (all cells empty)
+    const emptyCols = new Set<number>();
+    for (let c = 0; c < numCols; c++) {
+      let isEmpty = true;
+      for (let r = 0; r < numRows; r++) {
+        if (grid[r][c].value.trim() !== '') {
+          isEmpty = false;
+          break;
+        }
+      }
+      if (isEmpty) emptyCols.add(c);
+    }
+
+    // Find empty rows (all cells empty)
+    const emptyRows = new Set<number>();
+    for (let r = 0; r < numRows; r++) {
+      let isEmpty = true;
+      for (let c = 0; c < numCols; c++) {
+        if (grid[r][c].value.trim() !== '') {
+          isEmpty = false;
+          break;
+        }
+      }
+      if (isEmpty) emptyRows.add(r);
+    }
+
+    setHiddenCols(emptyCols);
+    setHiddenRows(emptyRows);
   };
 
   if (loading) return <Text color="gray">Loading spreadsheet...</Text>;
@@ -345,20 +390,28 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   if (!grid || grid.length === 0) return <Text color="gray">No data</Text>;
 
   const numCols = grid[0]?.length || 0;
-  const hasHiddenCols = hiddenCols.size > 0;
+  const hasHidden = hiddenCols.size > 0 || hiddenRows.size > 0;
 
   return (
     <Box className="excel-viewer">
-      {hasHiddenCols && (
-        <Flex gap="2" mb="2" align="center" className="excel-toolbar">
-          <Text size="1" color="gray">
-            {hiddenCols.size} column(s) hidden
-          </Text>
-          <button className="excel-show-all-btn" onClick={showAllColumns}>
-            Show all
-          </button>
-        </Flex>
-      )}
+      <Flex gap="2" mb="2" align="center" className="excel-toolbar">
+        <button className="excel-toolbar-btn" onClick={hideEmptyRowsAndCols}>
+          Hide empty
+        </button>
+        {hasHidden && (
+          <>
+            <Text size="1" color="gray">
+              {hiddenCols.size > 0 && `${hiddenCols.size} col(s)`}
+              {hiddenCols.size > 0 && hiddenRows.size > 0 && ', '}
+              {hiddenRows.size > 0 && `${hiddenRows.size} row(s)`}
+              {' hidden'}
+            </Text>
+            <button className="excel-show-all-btn" onClick={showAll}>
+              Show all
+            </button>
+          </>
+        )}
+      </Flex>
       <table ref={tableRef} id="excel-table">
         <thead>
           <tr className="excel-header-row">
@@ -394,24 +447,27 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
           </tr>
         </thead>
         <tbody>
-          {grid.map((row, rowIdx) => (
-            <tr key={rowIdx}>
-              <th className="excel-row-header">{rowIdx + 1}</th>
-              {row.map((cell, colIdx) => {
-                if (hiddenCols.has(colIdx)) return null;
-                const width = colWidths.get(colIdx);
-                return (
-                  <td
-                    key={colIdx}
-                    className={cell.isMerged ? 'merged-cell' : ''}
-                    style={width ? { width, minWidth: width, maxWidth: width } : undefined}
-                  >
-                    {cell.value}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+          {grid.map((row, rowIdx) => {
+            if (hiddenRows.has(rowIdx)) return null;
+            return (
+              <tr key={rowIdx}>
+                <th className="excel-row-header">{rowIdx + 1}</th>
+                {row.map((cell, colIdx) => {
+                  if (hiddenCols.has(colIdx)) return null;
+                  const width = colWidths.get(colIdx);
+                  return (
+                    <td
+                      key={colIdx}
+                      className={cell.isMerged ? 'merged-cell' : ''}
+                      style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+                    >
+                      {cell.value}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </Box>

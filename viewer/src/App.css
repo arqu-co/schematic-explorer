@@ -208,6 +208,20 @@ html, body, #root {
   border-radius: var(--radius-2);
 }
 
+.excel-toolbar-btn {
+  background: var(--gray-5);
+  color: var(--gray-12);
+  border: none;
+  border-radius: var(--radius-2);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.excel-toolbar-btn:hover {
+  background: var(--gray-6);
+}
+
 .excel-show-all-btn {
   background: var(--accent-9);
   color: white;
