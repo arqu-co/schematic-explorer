@@ -40,18 +40,27 @@ sys.modules["dotenv"] = mock_dotenv
 
 # Now we can import verify
 import schematic_explorer.verify as verify_module
+import schematic_explorer.verify.gemini as gemini_module
+import schematic_explorer.verify.core as core_module
 from schematic_explorer.verify import (
-    _entries_to_text,
-    _excel_to_text,
-    _get_client,
-    _get_snapshot_path,
-    _parse_json_response,
+    entries_to_text,
+    excel_to_text,
+    get_client,
+    get_snapshot_path,
+    parse_json_response,
     cross_check_layer_totals,
     cross_validate,
     verify_extraction,
     verify_file,
     verify_snapshot,
 )
+
+# Backward compatibility aliases for tests
+_entries_to_text = entries_to_text
+_excel_to_text = excel_to_text
+_get_client = get_client
+_get_snapshot_path = get_snapshot_path
+_parse_json_response = parse_json_response
 
 # ============================================================================
 # Fixtures
@@ -363,7 +372,10 @@ class TestGetSnapshotPath:
     def test_returns_path_when_snapshot_exists(self, tmp_path):
         """Test that path is returned when snapshot exists."""
         # Create a mock output directory structure
-        with patch.object(verify_module, "OUTPUT_DIR", tmp_path):
+        # Patch OUTPUT_DIR in the core module where get_snapshot_path is defined
+        import schematic_explorer.verify.core as core_module
+
+        with patch.object(core_module, "OUTPUT_DIR", tmp_path):
             snapshot = tmp_path / "test.png"
             snapshot.write_bytes(b"fake png")
             result = _get_snapshot_path("/some/path/test.xlsx")
@@ -390,7 +402,7 @@ class TestGetClient:
         mock_genai_local.GenerativeModel.return_value = MagicMock()
 
         with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}):
-            with patch.object(verify_module, "genai", mock_genai_local):
+            with patch.object(gemini_module, "genai", mock_genai_local):
                 _get_client()
                 mock_genai_local.configure.assert_called_once_with(api_key="test-key")
 
@@ -402,7 +414,7 @@ class TestGetClient:
         with patch.dict(
             "os.environ", {"GEMINI_API_KEY": "test-key", "GEMINI_MODEL_ID": "custom-model"}
         ):
-            with patch.object(verify_module, "genai", mock_genai_local):
+            with patch.object(gemini_module, "genai", mock_genai_local):
                 _get_client()
                 mock_genai_local.GenerativeModel.assert_called_once_with("custom-model")
 
@@ -412,7 +424,7 @@ class TestGetClient:
         mock_genai_local.GenerativeModel.return_value = MagicMock()
 
         with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key"}, clear=True):
-            with patch.object(verify_module, "genai", mock_genai_local):
+            with patch.object(gemini_module, "genai", mock_genai_local):
                 _get_client()
                 mock_genai_local.GenerativeModel.assert_called_once_with("gemini-2.5-flash")
 
@@ -435,8 +447,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.95
@@ -462,8 +474,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.7
@@ -475,8 +487,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = Exception("API Error")
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.0
@@ -507,9 +519,9 @@ class TestVerifyExtraction:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = verify_extraction(excel_file, sample_entries)
 
                     assert result.score == 0.9
@@ -537,9 +549,9 @@ class TestVerifyExtraction:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = verify_extraction(excel_file, sample_entries)
 
                     # Should use fallback result
@@ -563,8 +575,8 @@ class TestVerifyExtraction:
         mock_model = MagicMock()
         mock_model.generate_content.side_effect = [mock_response_bad, mock_response_good]
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=None):
                 result = verify_extraction(excel_file, sample_entries)
 
                 assert result.score == 0.8
@@ -580,7 +592,7 @@ class TestVerifySnapshot:
 
     def test_returns_none_without_snapshot(self, sample_entries):
         """Test that None is returned without snapshot."""
-        with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_snapshot_path", return_value=None):
             result = verify_snapshot("/test.xlsx", sample_entries)
             assert result is None
 
@@ -605,9 +617,9 @@ class TestVerifySnapshot:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result is not None
@@ -625,9 +637,9 @@ class TestVerifySnapshot:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result.score == 0.0
@@ -658,9 +670,9 @@ class TestVerifySnapshot:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = verify_snapshot("/test.xlsx", sample_entries)
 
                     assert result.score == 0.75
@@ -687,7 +699,7 @@ class TestCrossValidate:
             raw_response="raw",
         )
 
-        with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_snapshot_path", return_value=None):
             result = cross_validate(excel_file, sample_entries, initial)
             assert result == initial
 
@@ -721,9 +733,9 @@ class TestCrossValidate:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = cross_validate(excel_file, sample_entries, initial)
 
                     assert result.score == 0.9
@@ -745,9 +757,9 @@ class TestCrossValidate:
 
         mock_image = MagicMock()
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                with patch.object(verify_module.Image, "open", return_value=mock_image):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                with patch.object(core_module.Image, "open", return_value=mock_image):
                     result = cross_validate(excel_file, sample_entries, initial)
 
                     assert result.score == 0.7
@@ -951,8 +963,8 @@ class TestVerifyFile:
             "schematic_explorer.extractor.extract_schematic_with_summaries",
             return_value=(sample_entries, sample_layer_summaries),
         ):
-            with patch.object(verify_module, "_get_client", return_value=mock_model):
-                with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+            with patch.object(core_module, "get_client", return_value=mock_model):
+                with patch.object(core_module, "get_snapshot_path", return_value=None):
                     result = verify_file(excel_file)
 
                     assert result.score == 0.95
@@ -998,9 +1010,9 @@ class TestVerifyFile:
             "schematic_explorer.extractor.extract_schematic_with_summaries",
             return_value=(sample_entries, sample_layer_summaries),
         ):
-            with patch.object(verify_module, "_get_client", return_value=mock_model):
-                with patch.object(verify_module, "_get_snapshot_path", return_value=snapshot):
-                    with patch.object(verify_module.Image, "open", return_value=mock_image):
+            with patch.object(core_module, "get_client", return_value=mock_model):
+                with patch.object(core_module, "get_snapshot_path", return_value=snapshot):
+                    with patch.object(core_module.Image, "open", return_value=mock_image):
                         result = verify_file(excel_file)
 
                         # Should get cross-validated score
@@ -1037,8 +1049,8 @@ class TestLazyImports:
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
 
-        with patch.object(verify_module, "_get_client", return_value=mock_model):
-            with patch.object(verify_module, "_get_snapshot_path", return_value=None):
+        with patch.object(core_module, "get_client", return_value=mock_model):
+            with patch.object(core_module, "get_snapshot_path", return_value=None):
                 result = ve(excel_file, sample_entries)
                 assert result.score == 0.9
 
