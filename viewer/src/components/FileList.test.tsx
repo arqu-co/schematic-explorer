@@ -15,14 +15,14 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 
 describe('FileList', () => {
   describe('rendering', () => {
-    it('renders the Files heading', () => {
-      render(
+    it('renders without errors when empty', () => {
+      const { container } = render(
         <TestWrapper>
           <FileList files={[]} selectedFile={null} onFileSelect={() => {}} />
         </TestWrapper>
       );
 
-      expect(screen.getByText('Files')).toBeInTheDocument();
+      expect(container.querySelector('.rt-ScrollAreaRoot')).toBeInTheDocument();
     });
 
     it('renders file names', () => {
@@ -176,13 +176,13 @@ describe('FileList', () => {
 
   describe('empty state', () => {
     it('renders empty list without errors', () => {
-      render(
+      const { container } = render(
         <TestWrapper>
           <FileList files={[]} selectedFile={null} onFileSelect={() => {}} />
         </TestWrapper>
       );
 
-      expect(screen.getByText('Files')).toBeInTheDocument();
+      expect(container.querySelector('.rt-ScrollAreaRoot')).toBeInTheDocument();
     });
   });
 });

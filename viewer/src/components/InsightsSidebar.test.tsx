@@ -14,14 +14,14 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 
 describe('InsightsSidebar', () => {
   describe('rendering', () => {
-    it('renders the Insights heading', () => {
+    it('renders without errors when insights is null', () => {
       render(
         <TestWrapper>
           <InsightsSidebar insights={null} />
         </TestWrapper>
       );
 
-      expect(screen.getByText('Insights')).toBeInTheDocument();
+      expect(screen.getByText('No verification insights available')).toBeInTheDocument();
     });
 
     it('shows message when no insights available', () => {
@@ -110,8 +110,8 @@ describe('InsightsSidebar', () => {
         </TestWrapper>
       );
 
-      // Should not crash and should render the component
-      expect(screen.getByText('Insights')).toBeInTheDocument();
+      // Empty string is falsy, so should show no insights message
+      expect(screen.getByText('No verification insights available')).toBeInTheDocument();
     });
 
     it('handles insights with only score', () => {

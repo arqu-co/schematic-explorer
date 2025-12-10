@@ -4,7 +4,7 @@ import '@radix-ui/themes/styles.css';
 import type { CarrierEntry, SchematicFile } from './types';
 import { groupByLayer } from './utils';
 import { useFiles, useTheme } from './hooks';
-import { FileList, MainContent, InsightsSidebar, ThemeToggleIcon } from './components';
+import { FileList, MainContent, InsightsSidebar, ThemeToggleIcon, ResizablePanel } from './components';
 import './App.css';
 
 function App() {
@@ -61,22 +61,44 @@ function App() {
           </IconButton>
         </Flex>
 
-        <Flex gap="4" className="app-content">
-          <FileList files={files} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
+        <Flex className="app-content">
+          <ResizablePanel
+            title="Files"
+            defaultWidth={280}
+            minWidth={200}
+            maxWidth={400}
+            resizeFrom="right"
+            className="sidebar-left"
+            storageKey="files-panel"
+          >
+            <FileList files={files} selectedFile={selectedFile} onFileSelect={handleFileSelect} />
+          </ResizablePanel>
 
-          {selectedFile && (
-            <MainContent
-              entries={selectedFile.entries}
-              layers={layers}
-              stem={selectedFile.stem}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              highlightEntry={highlightEntry}
-              onCellClick={handleCellClick}
-            />
-          )}
+          <Box className="main-content" style={{ flex: 1, minWidth: 0 }}>
+            {selectedFile && (
+              <MainContent
+                entries={selectedFile.entries}
+                layers={layers}
+                stem={selectedFile.stem}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                highlightEntry={highlightEntry}
+                onCellClick={handleCellClick}
+              />
+            )}
+          </Box>
 
-          <InsightsSidebar insights={selectedFile?.insights ?? null} />
+          <ResizablePanel
+            title="Insights"
+            defaultWidth={320}
+            minWidth={200}
+            maxWidth={500}
+            resizeFrom="left"
+            className="sidebar-right"
+            storageKey="insights-panel"
+          >
+            <InsightsSidebar insights={selectedFile?.insights ?? null} />
+          </ResizablePanel>
         </Flex>
       </Box>
     </Theme>

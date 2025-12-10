@@ -2,7 +2,7 @@
  * Insights sidebar component.
  */
 
-import { Heading, Box, Flex, Badge, Text } from '@radix-ui/themes';
+import { Box, Flex, Badge, Text } from '@radix-ui/themes';
 import Markdown from 'react-markdown';
 
 /**
@@ -48,12 +48,5 @@ interface InsightsSidebarProps {
  * Shows accuracy score badge and renders insights as markdown.
  */
 export function InsightsSidebar({ insights }: InsightsSidebarProps) {
-  return (
-    <Box className="sidebar-right">
-      <Heading size="3" mb="2">
-        Insights
-      </Heading>
-      <InsightsPanel insights={insights} />
-    </Box>
-  );
+  return <InsightsPanel insights={insights} />;
 }

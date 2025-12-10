@@ -21,21 +21,61 @@ html, body, #root {
 .app-content {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 3fr 1fr;
-  grid-template-rows: minmax(0, 1fr);
+  display: flex;
   gap: var(--space-4);
   overflow: hidden;
 }
 
 .sidebar-left,
-.sidebar-right,
+.sidebar-right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
 .main-content {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
   min-height: 0;
+}
+
+/* Resizable panel styles */
+.resizable-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--color-panel);
+  border-radius: var(--radius-3);
+  padding: var(--space-3);
+  border: 1px solid var(--gray-5);
+}
+
+.resizable-panel.collapsed {
+  padding: var(--space-2);
+  align-items: center;
+}
+
+.resizable-panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.resize-handle {
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent-6);
 }
 
 .sidebar-scroll {

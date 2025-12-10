@@ -2,7 +2,7 @@
  * File list sidebar component.
  */
 
-import { Heading, Box, ScrollArea, Flex, Card, Text, Badge } from '@radix-ui/themes';
+import { Box, ScrollArea, Flex, Card, Text, Badge, Heading } from '@radix-ui/themes';
 import type { SchematicFile } from '../types';
 import { formatCurrency, groupByLayer } from '../utils';
 
@@ -81,22 +81,17 @@ interface FileListProps {
  */
 export function FileList({ files, selectedFile, onFileSelect }: FileListProps) {
   return (
-    <Box className="sidebar-left">
-      <Heading size="3" mb="2">
-        Files
-      </Heading>
-      <ScrollArea className="sidebar-scroll">
-        <Flex direction="column" gap="2">
-          {files.map((file) => (
-            <SchematicCard
-              key={file.name}
-              file={file}
-              isSelected={selectedFile?.name === file.name}
-              onSelect={() => onFileSelect(file)}
-            />
-          ))}
-        </Flex>
-      </ScrollArea>
-    </Box>
+    <ScrollArea className="sidebar-scroll">
+      <Flex direction="column" gap="2">
+        {files.map((file) => (
+          <SchematicCard
+            key={file.name}
+            file={file}
+            isSelected={selectedFile?.name === file.name}
+            onSelect={() => onFileSelect(file)}
+          />
+        ))}
+      </Flex>
+    </ScrollArea>
   );
 }
