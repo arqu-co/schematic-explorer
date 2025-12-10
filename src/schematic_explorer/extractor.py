@@ -347,7 +347,16 @@ def _split_multiline_carrier(carrier_block: Block) -> list[tuple[Block, str]]:
     The original_cell_ref preserves the actual Excel cell for traceability.
     """
     value = carrier_block.value
-    original_cell = f"{get_column_letter(carrier_block.col)}{carrier_block.row}"
+
+    # Build full cell reference (e.g., "B5:D7") for merged cells
+    start_col = get_column_letter(carrier_block.col)
+    start_row = carrier_block.row
+    if carrier_block.cols > 1 or carrier_block.rows > 1:
+        end_col = get_column_letter(carrier_block.col + carrier_block.cols - 1)
+        end_row = carrier_block.row + carrier_block.rows - 1
+        original_cell = f"{start_col}{start_row}:{end_col}{end_row}"
+    else:
+        original_cell = f"{start_col}{start_row}"
 
     if not isinstance(value, str):
         return [(carrier_block, original_cell)]
@@ -772,8 +781,18 @@ def _build_entry_from_proximity(
             if matched_desc is not None:
                 layer_desc = matched_desc
 
-    # Build cell reference
-    cell_ref = original_cell if original_cell else f"{get_column_letter(carrier.col)}{carrier.row}"
+    # Build cell reference - use full range format (e.g., "B5:D7") for merged cells
+    if original_cell:
+        cell_ref = original_cell
+    else:
+        start_col = get_column_letter(carrier.col)
+        start_row = carrier.row
+        if carrier.cols > 1 or carrier.rows > 1:
+            end_col = get_column_letter(carrier.col + carrier.cols - 1)
+            end_row = carrier.row + carrier.rows - 1
+            cell_ref = f"{start_col}{start_row}:{end_col}{end_row}"
+        else:
+            cell_ref = f"{start_col}{start_row}"
 
     # Parse attachment point from carrier name or layer description
     carrier_name = str(carrier.value).strip()

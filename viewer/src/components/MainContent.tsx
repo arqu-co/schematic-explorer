@@ -201,33 +201,15 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
 
     const rows = table.querySelectorAll('tr');
 
-    // Find how far right to extend (until hitting a non-empty cell in starting row)
-    let endCol = parsed.startCol;
-    const startRow = rows[parsed.startRow];
-    if (startRow) {
-      for (let c = parsed.startCol + 1; c < startRow.children.length; c++) {
-        const cell = startRow.children[c] as HTMLElement;
-        if (cell && cell.textContent?.trim()) break;
-        endCol = c;
-      }
-    }
-
-    // Find how far down to extend (until hitting a non-empty cell in starting column)
-    let endRow = parsed.startRow;
-    for (let r = parsed.startRow + 1; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row) break;
-      const cell = row.children[parsed.startCol] as HTMLElement;
-      if (cell && cell.textContent?.trim()) break;
-      endRow = r;
-    }
+    // Use the parsed range directly - it now contains accurate bounds from extraction
+    const { startCol, startRow, endCol, endRow } = parsed;
 
     // Highlight the rectangular region
     let firstHighlighted: Element | null = null;
-    for (let r = parsed.startRow; r <= endRow; r++) {
+    for (let r = startRow; r <= endRow; r++) {
       const row = rows[r];
       if (!row) continue;
-      for (let c = parsed.startCol; c <= endCol; c++) {
+      for (let c = startCol; c <= endCol; c++) {
         const cell = row.children[c] as HTMLElement;
         if (cell) {
           cell.classList.add('cell-highlight');
