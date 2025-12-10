@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import '@radix-ui/themes/styles.css';
 import type { CarrierEntry, SchematicFile, Layer } from './types';
 import { formatCurrency, formatPercent, hexToRgba, groupByLayer, parseRange } from './utils';
+import { API_PATHS, getDataUrl, getInsightsUrl, getInputExcelUrl } from './api';
 import './App.css';
 
 function TowerVisualization({ layers, onCellClick }: { layers: Layer[]; onCellClick?: (entry: CarrierEntry) => void }) {
@@ -125,7 +126,7 @@ function ExcelViewer({ stem, highlightRange }: { stem: string; highlightRange?: 
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/input/${stem}.xlsx`);
+        const response = await fetch(getInputExcelUrl(stem));
         if (!response.ok) throw new Error('Failed to load Excel file');
         const arrayBuffer = await response.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true });
@@ -278,7 +279,7 @@ function App() {
   useEffect(() => {
     async function loadData() {
       try {
-        const indexRes = await fetch('/api/files');
+        const indexRes = await fetch(API_PATHS.FILES);
         if (!indexRes.ok) throw new Error('Failed to load file index');
         const fileList: string[] = await indexRes.json();
 
@@ -286,8 +287,8 @@ function App() {
           fileList.map(async (name) => {
             const stem = name.replace('.json', '');
             const [jsonRes, insightsRes] = await Promise.all([
-              fetch(`/api/data/${name}`),
-              fetch(`/api/data/${stem}_insights.txt`).catch(() => null)
+              fetch(getDataUrl(name)),
+              fetch(getInsightsUrl(stem)).catch(() => null)
             ]);
 
             const entries: CarrierEntry[] = jsonRes.ok ? await jsonRes.json() : [];
