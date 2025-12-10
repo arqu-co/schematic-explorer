@@ -110,7 +110,7 @@ export function groupByLayer(entries: CarrierEntry[]): Layer[] {
 // =============================================================================
 
 /**
- * Convert Excel column letters to 0-indexed number (A=0, B=1, etc.).
+ * Convert Excel column letters to 1-indexed number (A=1, B=2, etc.).
  */
 function colToNum(col: string): number {
   let num = 0;
@@ -118,6 +118,19 @@ function colToNum(col: string): number {
     num = num * 26 + col.charCodeAt(i) - 64;
   }
   return num;
+}
+
+/**
+ * Convert 1-indexed column number to Excel column letters (1=A, 2=B, 27=AA, etc.).
+ */
+export function numToCol(num: number): string {
+  let col = '';
+  while (num > 0) {
+    const rem = (num - 1) % 26;
+    col = String.fromCharCode(65 + rem) + col;
+    num = Math.floor((num - 1) / 26);
+  }
+  return col;
 }
 
 /**

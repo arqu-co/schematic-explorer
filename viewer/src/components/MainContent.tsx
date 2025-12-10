@@ -6,7 +6,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Box, Tabs, Flex, Text, Badge, Table, Code } from '@radix-ui/themes';
 import * as XLSX from 'xlsx';
 import type { CarrierEntry, Layer } from '../types';
-import { formatCurrency, formatPercent, hexToRgba, parseRange, sanitizeHtml } from '../utils';
+import { formatCurrency, formatPercent, hexToRgba, numToCol, parseRange, sanitizeHtml } from '../utils';
 import { getInputExcelUrl } from '../api';
 
 // =============================================================================
@@ -185,6 +185,44 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     loadExcel();
   }, [stem]);
 
+  // Add row numbers and column headers after HTML is rendered
+  useEffect(() => {
+    if (!containerRef.current || !html) return;
+
+    const table = containerRef.current.querySelector('table');
+    if (!table) return;
+
+    const rows = table.querySelectorAll('tr');
+    if (rows.length === 0) return;
+
+    // Determine number of columns from first row
+    const numCols = rows[0]?.children.length || 0;
+
+    // Add column header row at the top
+    const headerRow = document.createElement('tr');
+    headerRow.className = 'excel-header-row';
+    // Empty corner cell
+    const cornerCell = document.createElement('th');
+    cornerCell.className = 'excel-corner-cell';
+    headerRow.appendChild(cornerCell);
+    // Column letters (A, B, C, ...)
+    for (let c = 0; c < numCols; c++) {
+      const th = document.createElement('th');
+      th.className = 'excel-col-header';
+      th.textContent = numToCol(c + 1);
+      headerRow.appendChild(th);
+    }
+    table.insertBefore(headerRow, rows[0]);
+
+    // Add row numbers to each existing row
+    rows.forEach((row, idx) => {
+      const rowNumCell = document.createElement('th');
+      rowNumCell.className = 'excel-row-header';
+      rowNumCell.textContent = String(idx + 1);
+      row.insertBefore(rowNumCell, row.firstChild);
+    });
+  }, [html]);
+
   useEffect(() => {
     if (!containerRef.current || !highlightRange) return;
 
@@ -202,14 +240,17 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     const rows = table.querySelectorAll('tr');
 
     // Use the parsed range directly - it now contains accurate bounds from extraction
+    // Add 1 to account for the header row/column we inserted
     const { startCol, startRow, endCol, endRow } = parsed;
 
     // Highlight the rectangular region
+    // +1 to row index because we added a header row at the top
+    // +1 to col index because we added a row number column on the left
     let firstHighlighted: Element | null = null;
-    for (let r = startRow; r <= endRow; r++) {
+    for (let r = startRow + 1; r <= endRow + 1; r++) {
       const row = rows[r];
       if (!row) continue;
-      for (let c = startCol; c <= endCol; c++) {
+      for (let c = startCol + 1; c <= endCol + 1; c++) {
         const cell = row.children[c] as HTMLElement;
         if (cell) {
           cell.classList.add('cell-highlight');
