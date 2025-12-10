@@ -153,15 +153,21 @@ GENERATION_CONFIG = {
 }
 
 
-def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
-    """Convert Excel file to text representation for Gemini.
+def _load_workbook_for_verification(filepath: str, sheet_name: str | None = None):
+    """Load workbook and return worksheet for verification.
+
+    Args:
+        filepath: Path to Excel file
+        sheet_name: Optional sheet name
+
+    Returns:
+        Tuple of (worksheet, filename)
 
     Raises:
         FileNotFoundError: If the file doesn't exist
         ValueError: If the file format is invalid or sheet name not found
     """
     import openpyxl
-    from openpyxl.utils import get_column_letter
     from openpyxl.utils.exceptions import InvalidFileException
 
     path = Path(filepath)
@@ -178,14 +184,21 @@ def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
         raise ValueError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
 
     ws = wb[sheet_name] if sheet_name else wb.active
+    return ws, path.name
 
-    lines = [f"Excel File: {Path(filepath).name}"]
-    if sheet_name:
-        lines.append(f"Sheet: {sheet_name}")
-    lines.append(f"Dimensions: {ws.dimensions}")
-    lines.append("")
 
-    # Output cell contents in a readable format
+def _format_cell_rows(ws) -> list[str]:
+    """Format worksheet cell contents as text lines.
+
+    Args:
+        ws: Worksheet to format
+
+    Returns:
+        List of formatted row strings
+    """
+    from openpyxl.utils import get_column_letter
+
+    lines = []
     # DO NOT truncate or limit - the LLM needs ALL cell contents to verify accuracy
     for row in range(1, ws.max_row + 1):
         row_cells = []
@@ -196,13 +209,48 @@ def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
                 row_cells.append(f"{get_column_letter(col)}{row}={val_str}")
         if row_cells:
             lines.append(f"Row {row}: {' | '.join(row_cells)}")
+    return lines
 
-    # Add merged cell info
+
+def _format_merged_cells(ws) -> list[str]:
+    """Format merged cell information as text lines.
+
+    Args:
+        ws: Worksheet with merged cells
+
+    Returns:
+        List of formatted merged cell strings
+    """
+    lines = []
     if ws.merged_cells.ranges:
         lines.append("")
         lines.append(f"Merged cells: {len(list(ws.merged_cells.ranges))}")
         for mr in list(ws.merged_cells.ranges)[:MAX_MERGED_CELLS_DISPLAY]:
             lines.append(f"  {mr}")
+    return lines
+
+
+def _excel_to_text(filepath: str, sheet_name: str | None = None) -> str:
+    """Convert Excel file to text representation for Gemini.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is invalid or sheet name not found
+    """
+    ws, filename = _load_workbook_for_verification(filepath, sheet_name)
+
+    # Build header
+    lines = [f"Excel File: {filename}"]
+    if sheet_name:
+        lines.append(f"Sheet: {sheet_name}")
+    lines.append(f"Dimensions: {ws.dimensions}")
+    lines.append("")
+
+    # Add cell contents
+    lines.extend(_format_cell_rows(ws))
+
+    # Add merged cell info
+    lines.extend(_format_merged_cells(ws))
 
     return "\n".join(lines)
 
