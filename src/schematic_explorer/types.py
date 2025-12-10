@@ -28,6 +28,27 @@ _LIMIT_PATTERN = re.compile(r"(\$[\d,.]+[KMBkmb]?)")
 
 
 @dataclass
+class CarrierMatchContext:
+    """Context for matching carrier blocks to related data.
+
+    Groups related parameters used when building CarrierEntry objects,
+    reducing the parameter count of proximity-matching functions.
+    """
+
+    layer: "Layer"  # The layer being processed
+    data_blocks: list  # List of data blocks to search for matches
+    column_headers: dict = None  # Dict mapping column types to column numbers
+    row_labels: dict = None  # Dict mapping row types to row numbers
+
+    def __post_init__(self):
+        """Set default empty dicts if None provided."""
+        if self.column_headers is None:
+            self.column_headers = {}
+        if self.row_labels is None:
+            self.row_labels = {}
+
+
+@dataclass
 class SummaryColumnInfo:
     """Information about summary/aggregate columns detected in a worksheet.
 

@@ -25,6 +25,7 @@ from .proximity import (
 from .types import (
     BILLION,
     CarrierEntry,
+    CarrierMatchContext,
     Layer,
     LayerSummary,
     SummaryColumnInfo,
@@ -443,11 +444,17 @@ def _extract_layer_data(
         and b.col not in summary_cols
     ]
 
+    # Create context for proximity matching
+    context = CarrierMatchContext(
+        layer=layer,
+        data_blocks=data_blocks,
+        column_headers=column_headers,
+        row_labels=row_labels,
+    )
+
     # Try to match carriers with their data using spatial proximity
     for carrier, original_cell in expanded_carriers:
-        entry = _build_entry_from_proximity(
-            ws, carrier, data_blocks, layer, column_headers, row_labels, original_cell
-        )
+        entry = _build_entry_from_proximity(ws, carrier, context, original_cell)
         if entry:
             entries.append(entry)
 
@@ -614,10 +621,7 @@ def _classify_row_label(val_lower: str, row: int, labels: dict) -> None:
 def _build_entry_from_proximity(
     ws,
     carrier: Block,
-    data_blocks: list[Block],
-    layer: Layer,
-    column_headers: dict = None,
-    row_labels: dict = None,
+    context: CarrierMatchContext,
     original_cell: str = None,
 ) -> CarrierEntry:
     """Build a CarrierEntry by finding spatially related data blocks.
@@ -625,15 +629,18 @@ def _build_entry_from_proximity(
     Args:
         ws: The worksheet
         carrier: The carrier block to build an entry for
-        data_blocks: List of data blocks to search for related data
-        layer: Layer object with limit, start_row, end_row
-        column_headers: Dict of column header positions
-        row_labels: Dict of row label positions
+        context: CarrierMatchContext with layer, data_blocks, column_headers, row_labels
         original_cell: The actual Excel cell reference (for multi-line carriers)
 
     Returns:
         CarrierEntry with extracted data
     """
+    # Extract from context
+    layer = context.layer
+    data_blocks = context.data_blocks
+    column_headers = context.column_headers
+    row_labels = context.row_labels
+
     # Define search ranges
     carrier_col_range = get_column_range(carrier)
     row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer.end_row + 1))

@@ -1,7 +1,9 @@
 """Tests for schematic_explorer.types module."""
 
+from schematic_explorer.blocks import Block
 from schematic_explorer.types import (
     CarrierEntry,
+    CarrierMatchContext,
     Layer,
     LayerSummary,
     SummaryColumnInfo,
@@ -64,6 +66,32 @@ class TestLayer:
             end_row=15,
         )
         assert layer1 == layer2
+
+
+class TestCarrierMatchContext:
+    """Tests for CarrierMatchContext dataclass."""
+
+    def test_create_basic_context(self):
+        """Test creating a basic CarrierMatchContext."""
+        layer = Layer(limit="$50M", limit_row=5, limit_col=1, start_row=5, end_row=15)
+        block = Block(row=6, col=2, value="Test", rows=1, cols=1)
+        context = CarrierMatchContext(
+            layer=layer,
+            data_blocks=[block],
+            column_headers={"premium_col": 3},
+            row_labels={"premium_row": 7},
+        )
+        assert context.layer == layer
+        assert len(context.data_blocks) == 1
+        assert context.column_headers == {"premium_col": 3}
+        assert context.row_labels == {"premium_row": 7}
+
+    def test_create_with_defaults(self):
+        """Test CarrierMatchContext with default empty dicts."""
+        layer = Layer(limit="$25M", limit_row=1, limit_col=1, start_row=1, end_row=10)
+        context = CarrierMatchContext(layer=layer, data_blocks=[])
+        assert context.column_headers == {}
+        assert context.row_labels == {}
 
 
 class TestSummaryColumnInfo:
