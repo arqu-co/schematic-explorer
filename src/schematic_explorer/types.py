@@ -48,6 +48,36 @@ class CarrierMatchContext:
             self.row_labels = {}
 
 
+@dataclass(frozen=True)
+class CurrencyMatchState:
+    """Immutable state for currency matching during carrier entry building.
+
+    Holds the current matched premium and premium_share values
+    as we iterate through currency blocks. Being frozen (immutable)
+    ensures thread-safety and clear state transitions.
+    """
+
+    premium: float | None = None
+    premium_share: float | None = None
+
+    def with_premium(self, value: float) -> "CurrencyMatchState":
+        """Return new state with updated premium."""
+        return CurrencyMatchState(premium=value, premium_share=self.premium_share)
+
+    def with_premium_share(self, value: float) -> "CurrencyMatchState":
+        """Return new state with updated premium_share."""
+        return CurrencyMatchState(premium=self.premium, premium_share=value)
+
+    @property
+    def has_value(self) -> bool:
+        """Check if any value has been matched."""
+        return self.premium is not None or self.premium_share is not None
+
+    def as_tuple(self) -> tuple[float | None, float | None]:
+        """Return values as tuple for backward compatibility."""
+        return (self.premium, self.premium_share)
+
+
 @dataclass
 class SummaryColumnInfo:
     """Information about summary/aggregate columns detected in a worksheet.

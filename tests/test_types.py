@@ -4,6 +4,7 @@ from schematic_explorer.blocks import Block
 from schematic_explorer.types import (
     CarrierEntry,
     CarrierMatchContext,
+    CurrencyMatchState,
     Layer,
     LayerSummary,
     SummaryColumnInfo,
@@ -93,6 +94,60 @@ class TestCarrierMatchContext:
         context = CarrierMatchContext(layer=layer, data_blocks=[])
         assert context.column_headers == {}
         assert context.row_labels == {}
+
+
+class TestCurrencyMatchState:
+    """Tests for CurrencyMatchState dataclass."""
+
+    def test_create_empty_state(self):
+        """Test creating empty CurrencyMatchState."""
+        state = CurrencyMatchState()
+        assert state.premium is None
+        assert state.premium_share is None
+
+    def test_create_with_premium(self):
+        """Test creating state with premium."""
+        state = CurrencyMatchState(premium=100000.0)
+        assert state.premium == 100000.0
+        assert state.premium_share is None
+
+    def test_create_with_both(self):
+        """Test creating state with both values."""
+        state = CurrencyMatchState(premium=100000.0, premium_share=25000.0)
+        assert state.premium == 100000.0
+        assert state.premium_share == 25000.0
+
+    def test_with_premium_returns_new_state(self):
+        """Test with_premium returns new state."""
+        state = CurrencyMatchState()
+        new_state = state.with_premium(50000.0)
+        assert new_state.premium == 50000.0
+        assert state.premium is None  # Original unchanged
+
+    def test_with_premium_share_returns_new_state(self):
+        """Test with_premium_share returns new state."""
+        state = CurrencyMatchState(premium=100000.0)
+        new_state = state.with_premium_share(25000.0)
+        assert new_state.premium == 100000.0
+        assert new_state.premium_share == 25000.0
+        assert state.premium_share is None  # Original unchanged
+
+    def test_has_value(self):
+        """Test has_value property."""
+        assert CurrencyMatchState().has_value is False
+        assert CurrencyMatchState(premium=100.0).has_value is True
+        assert CurrencyMatchState(premium_share=50.0).has_value is True
+        assert CurrencyMatchState(premium=100.0, premium_share=50.0).has_value is True
+
+    def test_as_tuple(self):
+        """Test as_tuple method."""
+        state = CurrencyMatchState(premium=100.0, premium_share=25.0)
+        assert state.as_tuple() == (100.0, 25.0)
+
+    def test_as_tuple_with_none(self):
+        """Test as_tuple with None values."""
+        state = CurrencyMatchState()
+        assert state.as_tuple() == (None, None)
 
 
 class TestSummaryColumnInfo:
