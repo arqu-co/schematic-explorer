@@ -738,6 +738,20 @@ def _build_entry_from_proximity(
     terms = None
     layer_desc = None
 
+    # Track bounding box of all matched blocks (for full excel_range)
+    min_col = carrier.col
+    max_col = carrier.col + carrier.cols - 1
+    min_row = carrier.row
+    max_row = carrier.row + carrier.rows - 1
+
+    def expand_bounds(block: Block) -> None:
+        """Expand bounding box to include this block."""
+        nonlocal min_col, max_col, min_row, max_row
+        min_col = min(min_col, block.col)
+        max_col = max(max_col, block.col + block.cols - 1)
+        min_row = min(min_row, block.row)
+        max_row = max(max_row, block.row + block.rows - 1)
+
     # Get rate column for filtering (Rate != participation)
     rate_col = column_headers.get("rate_col") if column_headers else None
 
@@ -758,6 +772,7 @@ def _build_entry_from_proximity(
             matched = _match_participation_in_block(block, row_labels, rate_col)
             if matched is not None:
                 participation = matched
+                expand_bounds(block)
                 continue
 
         # Match currency blocks (premium)
@@ -766,6 +781,7 @@ def _build_entry_from_proximity(
         )
         if new_premium != premium or new_premium_share != premium_share:
             premium, premium_share = new_premium, new_premium_share
+            expand_bounds(block)
             continue
 
         # Match terms
@@ -773,6 +789,7 @@ def _build_entry_from_proximity(
             matched_terms = _match_terms_in_block(block)
             if matched_terms is not None:
                 terms = matched_terms
+                expand_bounds(block)
                 continue
 
         # Match layer description
@@ -780,19 +797,15 @@ def _build_entry_from_proximity(
             matched_desc = _match_layer_description_in_block(block)
             if matched_desc is not None:
                 layer_desc = matched_desc
+                expand_bounds(block)
 
-    # Build cell reference - use full range format (e.g., "B5:D7") for merged cells
-    if original_cell:
-        cell_ref = original_cell
+    # Build cell reference - full range covering carrier and all matched data blocks
+    start_col_letter = get_column_letter(min_col)
+    end_col_letter = get_column_letter(max_col)
+    if min_col == max_col and min_row == max_row:
+        cell_ref = f"{start_col_letter}{min_row}"
     else:
-        start_col = get_column_letter(carrier.col)
-        start_row = carrier.row
-        if carrier.cols > 1 or carrier.rows > 1:
-            end_col = get_column_letter(carrier.col + carrier.cols - 1)
-            end_row = carrier.row + carrier.rows - 1
-            cell_ref = f"{start_col}{start_row}:{end_col}{end_row}"
-        else:
-            cell_ref = f"{start_col}{start_row}"
+        cell_ref = f"{start_col_letter}{min_row}:{end_col_letter}{max_row}"
 
     # Parse attachment point from carrier name or layer description
     carrier_name = str(carrier.value).strip()
@@ -813,8 +826,8 @@ def _build_entry_from_proximity(
         terms=terms,
         policy_number=None,
         excel_range=cell_ref,
-        col_span=carrier.cols,
-        row_span=carrier.rows,
+        col_span=max_col - min_col + 1,  # Full width of matched region
+        row_span=max_row - min_row + 1,  # Full height of matched region
         fill_color=get_cell_color(ws, carrier.row, carrier.col),
         attachment_point=attachment_point,
         canonical_carrier=canonical_carrier,  # Resolved canonical name
