@@ -7,6 +7,7 @@ from schematic_explorer.types import (
     Layer,
     LayerSummary,
     SummaryColumnInfo,
+    VerificationError,
     VerificationResult,
     parse_excess_notation,
     parse_limit_for_sort,
@@ -235,6 +236,21 @@ class TestLayerSummary:
         assert d["layer_limit"] == "$75M"
         assert d["layer_bound_premium"] == 300000.0
         assert d["layer_target"] is None
+
+
+class TestVerificationError:
+    """Tests for VerificationError exception."""
+
+    def test_raise_verification_error(self):
+        """Test raising VerificationError."""
+        try:
+            raise VerificationError("Test error message")
+        except VerificationError as e:
+            assert str(e) == "Test error message"
+
+    def test_is_exception_subclass(self):
+        """Test that VerificationError is an Exception subclass."""
+        assert issubclass(VerificationError, Exception)
 
 
 class TestVerificationResult:

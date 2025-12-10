@@ -127,6 +127,12 @@ class LayerSummary:
         return asdict(self)
 
 
+class VerificationError(Exception):
+    """Raised when verification parsing fails after all retry attempts."""
+
+    pass
+
+
 @dataclass
 class VerificationResult:
     """Result of verification check."""

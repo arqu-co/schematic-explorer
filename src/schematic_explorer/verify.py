@@ -9,7 +9,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 
-from .types import CarrierEntry, LayerSummary, VerificationResult
+from .types import CarrierEntry, LayerSummary, VerificationError, VerificationResult
 
 # =============================================================================
 # Configuration Constants
@@ -514,7 +514,7 @@ def _make_gemini_request(
         )
     except Exception as fallback_error:
         logger.error("%s: fallback parser also failed (%s)", context, str(fallback_error))
-        raise Exception(
+        raise VerificationError(
             f"Both structured output and fallback parsing failed: {structured_error_msg}, {fallback_error}"
         ) from fallback_error
 
