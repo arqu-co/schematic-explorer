@@ -219,7 +219,12 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   const [grid, setGrid] = useState<{ value: string; isMerged: boolean; isOrigin: boolean }[][] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hiddenCols, setHiddenCols] = useState<Set<number>>(new Set());
+  const [colWidths, setColWidths] = useState<Map<number, number>>(new Map());
+  const [resizingCol, setResizingCol] = useState<number | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
 
   useEffect(() => {
     async function loadExcel() {
@@ -233,6 +238,8 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const cellGrid = buildCellGrid(firstSheet);
         setGrid(cellGrid);
+        setHiddenCols(new Set());
+        setColWidths(new Map());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Excel');
       } finally {
@@ -241,6 +248,33 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     }
     loadExcel();
   }, [stem]);
+
+  // Mouse move handler for column resizing
+  useEffect(() => {
+    if (resizingCol === null) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - startXRef.current;
+      const newWidth = Math.max(30, startWidthRef.current + delta);
+      setColWidths((prev) => new Map(prev).set(resizingCol, newWidth));
+    };
+
+    const handleMouseUp = () => {
+      setResizingCol(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingCol]);
 
   // Highlight effect
   useEffect(() => {
@@ -256,12 +290,19 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
 
     const { startCol, startRow, endCol, endRow } = parsed;
 
-    // Find and highlight cells (accounting for header row/col with +1)
+    // Find and highlight cells (accounting for header row/col and hidden columns)
     let firstHighlighted: Element | null = null;
     for (let r = startRow; r <= endRow; r++) {
       for (let c = startCol; c <= endCol; c++) {
-        // +1 for header row, +1 for row number column
-        const cell = tableRef.current.querySelector(`tr:nth-child(${r + 2}) td:nth-child(${c + 2})`) as HTMLElement;
+        if (hiddenCols.has(c)) continue;
+        // Calculate visual column index accounting for hidden columns
+        let visualCol = 1; // Start at 1 for row number column
+        for (let i = 0; i <= c; i++) {
+          if (!hiddenCols.has(i)) visualCol++;
+        }
+        const cell = tableRef.current.querySelector(
+          `tr:nth-child(${r + 2}) > *:nth-child(${visualCol})`
+        ) as HTMLElement;
         if (cell) {
           cell.classList.add('cell-highlight');
           if (!firstHighlighted) firstHighlighted = cell;
@@ -272,34 +313,103 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     if (firstHighlighted) {
       firstHighlighted.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }
-  }, [highlightRange, grid]);
+  }, [highlightRange, grid, hiddenCols]);
+
+  const handleResizeStart = (colIdx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingCol(colIdx);
+    startXRef.current = e.clientX;
+    const th = e.currentTarget.parentElement as HTMLElement;
+    startWidthRef.current = th.offsetWidth;
+  };
+
+  const toggleColumnHidden = (colIdx: number) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(colIdx)) {
+        next.delete(colIdx);
+      } else {
+        next.add(colIdx);
+      }
+      return next;
+    });
+  };
+
+  const showAllColumns = () => {
+    setHiddenCols(new Set());
+  };
 
   if (loading) return <Text color="gray">Loading spreadsheet...</Text>;
   if (error) return <Text color="red">{error}</Text>;
   if (!grid || grid.length === 0) return <Text color="gray">No data</Text>;
 
   const numCols = grid[0]?.length || 0;
+  const hasHiddenCols = hiddenCols.size > 0;
 
   return (
     <Box className="excel-viewer">
+      {hasHiddenCols && (
+        <Flex gap="2" mb="2" align="center" className="excel-toolbar">
+          <Text size="1" color="gray">
+            {hiddenCols.size} column(s) hidden
+          </Text>
+          <button className="excel-show-all-btn" onClick={showAllColumns}>
+            Show all
+          </button>
+        </Flex>
+      )}
       <table ref={tableRef} id="excel-table">
         <thead>
           <tr className="excel-header-row">
             <th className="excel-corner-cell"></th>
-            {Array.from({ length: numCols }, (_, c) => (
-              <th key={c} className="excel-col-header">{numToCol(c + 1)}</th>
-            ))}
+            {Array.from({ length: numCols }, (_, c) => {
+              if (hiddenCols.has(c)) return null;
+              const width = colWidths.get(c);
+              return (
+                <th
+                  key={c}
+                  className="excel-col-header"
+                  style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+                >
+                  <Flex align="center" justify="between" gap="1">
+                    <span>{numToCol(c + 1)}</span>
+                    <Flex gap="1">
+                      <button
+                        className="col-hide-btn"
+                        onClick={() => toggleColumnHidden(c)}
+                        title={`Hide column ${numToCol(c + 1)}`}
+                      >
+                        ×
+                      </button>
+                    </Flex>
+                  </Flex>
+                  <div
+                    className="col-resize-handle"
+                    onMouseDown={(e) => handleResizeStart(c, e)}
+                  />
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {grid.map((row, rowIdx) => (
             <tr key={rowIdx}>
               <th className="excel-row-header">{rowIdx + 1}</th>
-              {row.map((cell, colIdx) => (
-                <td key={colIdx} className={cell.isMerged ? 'merged-cell' : ''}>
-                  {cell.value}
-                </td>
-              ))}
+              {row.map((cell, colIdx) => {
+                if (hiddenCols.has(colIdx)) return null;
+                const width = colWidths.get(colIdx);
+                return (
+                  <td
+                    key={colIdx}
+                    className={cell.isMerged ? 'merged-cell' : ''}
+                    style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+                  >
+                    {cell.value}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>

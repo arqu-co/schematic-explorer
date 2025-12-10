@@ -162,6 +162,66 @@ html, body, #root {
   background: var(--gray-a2);
 }
 
+/* Column resize and hide controls */
+.excel-viewer .excel-col-header {
+  position: relative;
+  user-select: none;
+}
+
+.excel-viewer .col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.excel-viewer .col-resize-handle:hover {
+  background: var(--accent-6);
+}
+
+.excel-viewer .col-hide-btn {
+  background: transparent;
+  border: none;
+  color: var(--gray-9);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.excel-viewer .excel-col-header:hover .col-hide-btn {
+  opacity: 1;
+}
+
+.excel-viewer .col-hide-btn:hover {
+  color: var(--red-9);
+}
+
+.excel-toolbar {
+  padding: 4px 8px;
+  background: var(--gray-3);
+  border-radius: var(--radius-2);
+}
+
+.excel-show-all-btn {
+  background: var(--accent-9);
+  color: white;
+  border: none;
+  border-radius: var(--radius-2);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.excel-show-all-btn:hover {
+  background: var(--accent-10);
+}
+
 .insights-panel {
   flex: 1;
   display: flex;
