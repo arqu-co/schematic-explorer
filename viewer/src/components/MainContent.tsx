@@ -6,7 +6,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Box, Tabs, Flex, Text, Badge, Table, Code } from '@radix-ui/themes';
 import * as XLSX from 'xlsx';
 import type { CarrierEntry, Layer } from '../types';
-import { formatCurrency, formatPercent, hexToRgba, parseRange } from '../utils';
+import { formatCurrency, formatPercent, hexToRgba, parseRange, sanitizeHtml } from '../utils';
 import { getInputExcelUrl } from '../api';
 
 // =============================================================================
@@ -230,7 +230,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   if (loading) return <Text color="gray">Loading spreadsheet...</Text>;
   if (error) return <Text color="red">{error}</Text>;
 
-  return <Box ref={containerRef} className="excel-viewer" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <Box ref={containerRef} className="excel-viewer" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
 }
 
 // =============================================================================

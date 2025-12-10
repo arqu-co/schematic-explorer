@@ -2,6 +2,7 @@
  * Utility functions for the Schematic Explorer viewer.
  */
 
+import DOMPurify from 'dompurify';
 import type { CarrierEntry, Layer } from './types';
 
 // =============================================================================
@@ -138,4 +139,37 @@ export function parseRange(
   const endRow = match[4] ? parseInt(match[4]) - 1 : startRow;
 
   return { startCol, startRow, endCol, endRow };
+}
+
+// =============================================================================
+// HTML Sanitization
+// =============================================================================
+
+/**
+ * Sanitize HTML to prevent XSS attacks.
+ * Allows safe elements (tables, divs, spans) and styling attributes.
+ */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'table',
+      'thead',
+      'tbody',
+      'tr',
+      'th',
+      'td',
+      'div',
+      'span',
+      'p',
+      'br',
+      'strong',
+      'em',
+      'b',
+      'i',
+      'a',
+      'colgroup',
+      'col',
+    ],
+    ALLOWED_ATTR: ['style', 'class', 'id', 'colspan', 'rowspan', 'width', 'height'],
+  });
 }

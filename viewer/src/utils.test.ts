@@ -3,7 +3,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseLimit, formatCurrency, formatPercent, hexToRgba, groupByLayer, parseRange } from './utils';
+import {
+  parseLimit,
+  formatCurrency,
+  formatPercent,
+  hexToRgba,
+  groupByLayer,
+  parseRange,
+  sanitizeHtml,
+} from './utils';
 import type { CarrierEntry } from './types';
 
 describe('parseLimit', () => {
@@ -132,5 +140,44 @@ describe('parseRange', () => {
   it('returns null for invalid range', () => {
     expect(parseRange('invalid')).toBeNull();
     expect(parseRange('')).toBeNull();
+  });
+});
+
+describe('sanitizeHtml', () => {
+  it('preserves safe HTML elements', () => {
+    const html = '<table><tr><td>Data</td></tr></table>';
+    const result = sanitizeHtml(html);
+    // DOMPurify normalizes HTML structure (adds tbody)
+    expect(result).toContain('<table>');
+    expect(result).toContain('<tr>');
+    expect(result).toContain('<td>Data</td>');
+    expect(result).toContain('</table>');
+  });
+
+  it('removes script tags', () => {
+    const html = '<div>Safe</div><script>alert("xss")</script>';
+    expect(sanitizeHtml(html)).toBe('<div>Safe</div>');
+  });
+
+  it('removes event handlers', () => {
+    const html = '<div onclick="alert(1)">Click</div>';
+    expect(sanitizeHtml(html)).toBe('<div>Click</div>');
+  });
+
+  it('removes javascript: URLs', () => {
+    const html = '<a href="javascript:alert(1)">Link</a>';
+    expect(sanitizeHtml(html)).toBe('<a>Link</a>');
+  });
+
+  it('handles empty string', () => {
+    expect(sanitizeHtml('')).toBe('');
+  });
+
+  it('preserves table styling attributes', () => {
+    // Use complete table structure so td is valid
+    const html = '<table><tr><td style="background-color: red;">Cell</td></tr></table>';
+    const result = sanitizeHtml(html);
+    expect(result).toContain('style=');
+    expect(result).toContain('background-color');
   });
 });
