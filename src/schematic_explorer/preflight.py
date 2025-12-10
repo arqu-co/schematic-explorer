@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from .blocks import classify_blocks
 from .extractor import _find_all_blocks, _identify_layers, _load_workbook
+from .scoring import calculate_weighted_score
 
 # =============================================================================
 # Constants
@@ -146,21 +147,24 @@ def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
         issues.append("No premium/currency values detected")
         suggestions.append("Currency values should be numbers > 1000 or strings starting with '$'")
 
-    # Calculate confidence score
-    confidence = 0.0
+    # Calculate confidence score using weighted components
     weights = {"layers": 0.3, "carriers": 0.3, "percentages": 0.2, "currency": 0.1, "terms": 0.1}
 
+    # Build present components with confidence values
+    present: dict[str, float] = {}
     if layers:
-        confidence += weights["layers"]
+        present["layers"] = 1.0
     if carriers:
         avg_carrier_conf = sum(c.confidence for c in carriers) / len(carriers)
-        confidence += weights["carriers"] * avg_carrier_conf
+        present["carriers"] = avg_carrier_conf
     if percentages:
-        confidence += weights["percentages"]
+        present["percentages"] = 1.0
     if currency:
-        confidence += weights["currency"]
+        present["currency"] = 1.0
     if terms:
-        confidence += weights["terms"]
+        present["terms"] = 1.0
+
+    confidence = calculate_weighted_score(weights, present)
 
     can_extract = len(layers) > 0 and len(carriers) > 0
 

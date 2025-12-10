@@ -1,5 +1,6 @@
 """Layer total cross-checking functionality."""
 
+from ..scoring import apply_penalty
 from ..types import CarrierEntry, LayerSummary, VerificationResult
 
 # Cross-check thresholds
@@ -131,8 +132,9 @@ def cross_check_layer_totals(
     # Adjust score only for severe issues
     score = result.score
     if discrepancies_found > 0:
-        penalty = min(PENALTY_PER_DISCREPANCY * discrepancies_found, MAX_LAYER_PENALTY)
-        score = max(0.0, score - penalty)
+        score = apply_penalty(
+            score, PENALTY_PER_DISCREPANCY, count=discrepancies_found, max_penalty=MAX_LAYER_PENALTY
+        )
         suggestions.append(
             f"Review {discrepancies_found} layer(s) with significant carrier/summary differences "
             "(note: summary columns may show prior year data)"
