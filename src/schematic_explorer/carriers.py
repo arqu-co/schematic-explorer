@@ -69,9 +69,6 @@ _CARRIERS_FILE = Path(__file__).parent / "carriers.yml"
 _KNOWN_CARRIERS: set[str] = set()
 _NON_CARRIERS: set[str] = set()
 
-# Alias for backwards compatibility with tests
-KNOWN_CARRIERS = _KNOWN_CARRIERS
-
 
 def _normalize_for_match(s: str) -> str:
     """Normalize string for fuzzy matching - lowercase, strip punctuation."""

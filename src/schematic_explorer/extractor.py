@@ -12,7 +12,7 @@ from typing import Any
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from .blocks import Block, BILLION, classify_blocks
+from .blocks import Block, classify_blocks
 from .carriers import _is_non_carrier, _looks_like_policy_number
 from .proximity import (
     calculate_block_proximity,
@@ -22,7 +22,7 @@ from .proximity import (
     match_currency_block,
     match_participation_block,
 )
-from .types import CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
+from .types import BILLION, CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
 from .utils import build_merged_cell_map, get_cell_color, get_cell_value
 
 # =============================================================================
@@ -36,6 +36,9 @@ LAYER_ROW_PROXIMITY = 2  # Distance threshold for "nearby" layer rows
 # Column limits
 MAX_LAYER_LIMIT_COLUMN = 2  # Layer limits should be in columns A or B
 MAX_HEADER_SCAN_ROW = 10  # How many rows to scan for headers
+
+# Confidence thresholds
+MIN_CARRIER_CONFIDENCE = 0.5  # Minimum confidence for carrier block inclusion
 
 # =============================================================================
 # Main Entry Point
@@ -401,7 +404,9 @@ def _extract_layer_data(
     carrier_blocks = [
         b
         for b in layer_blocks
-        if b.field_type == "carrier" and b.confidence >= 0.5 and b.col not in summary_cols
+        if b.field_type == "carrier"
+        and b.confidence >= MIN_CARRIER_CONFIDENCE
+        and b.col not in summary_cols
     ]
 
     # Split multi-line carrier blocks into individual carriers
@@ -800,5 +805,3 @@ def extract_schematic_with_summaries(
     ws = _load_workbook(filepath, sheet_name)
     entries, summaries = extract_adaptive(ws)
     return ([entry.to_dict() for entry in entries], [summary.to_dict() for summary in summaries])
-
-

@@ -1,6 +1,30 @@
 """Type definitions for insurance tower extraction."""
 
+import re
 from dataclasses import asdict, dataclass
+
+# =============================================================================
+# Magnitude Constants
+# =============================================================================
+
+THOUSAND = 1_000
+MILLION = 1_000_000
+BILLION = 1_000_000_000
+
+# =============================================================================
+# Compiled Regex Patterns
+# =============================================================================
+
+# Patterns for parsing "xs." / "x/s" / "excess" notation
+_EXCESS_PATTERN_DOLLAR = re.compile(
+    r"(\$[\d,.]+[KMBkmb]?)\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*(\$[\d,.]+[KMBkmb]?)",
+    re.IGNORECASE,
+)
+_EXCESS_PATTERN_NO_DOLLAR = re.compile(
+    r"([\d,.]+[KMBkmb])\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*([\d,.]+[KMBkmb])",
+    re.IGNORECASE,
+)
+_LIMIT_PATTERN = re.compile(r"(\$[\d,.]+[KMBkmb]?)")
 
 
 @dataclass
@@ -57,16 +81,16 @@ class VerificationResult:
     metadata: dict | None = None  # Additional info (e.g., fallback_used, parsing_method)
 
 
-def parse_limit_value(val) -> str | None:
+def parse_limit_value(val: int | float | str | None) -> str | None:
     """Parse various limit formats into standardized string."""
     if val is None:
         return None
 
     if isinstance(val, int | float):
-        if val >= 1_000_000:
-            return f"${int(val / 1_000_000)}M"
-        elif val >= 1_000:
-            return f"${int(val / 1_000)}K"
+        if val >= MILLION:
+            return f"${int(val / MILLION)}M"
+        elif val >= THOUSAND:
+            return f"${int(val / THOUSAND)}K"
         return f"${int(val)}"
 
     if isinstance(val, str):
@@ -82,7 +106,7 @@ def parse_limit_value(val) -> str | None:
     return None
 
 
-def parse_excess_notation(text: str) -> tuple[str | None, str | None]:
+def parse_excess_notation(text: str | None) -> tuple[str | None, str | None]:
     """Parse 'xs.' or 'x/s' or 'excess' notation from policy description.
 
     Examples:
@@ -92,49 +116,43 @@ def parse_excess_notation(text: str) -> tuple[str | None, str | None]:
     Returns:
         Tuple of (limit, attachment_point) - either may be None
     """
-    import re
-
     if not text or not isinstance(text, str):
         return None, None
 
-    patterns = [
-        r"(\$[\d,.]+[KMBkmb]?)\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*(\$[\d,.]+[KMBkmb]?)",
-        r"([\d,.]+[KMBkmb])\s*(?:xs\.?|x/s|excess(?:\s+of)?)\s*([\d,.]+[KMBkmb])",
-    ]
+    # Try dollar-prefixed pattern first
+    match = _EXCESS_PATTERN_DOLLAR.search(text)
+    if match:
+        return match.group(1).upper(), match.group(2).upper()
 
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            limit = match.group(1)
-            attachment = match.group(2)
-            if not limit.startswith("$"):
-                limit = "$" + limit
-            if not attachment.startswith("$"):
-                attachment = "$" + attachment
-            return limit.upper(), attachment.upper()
+    # Try non-dollar pattern (adds $ prefix to results)
+    match = _EXCESS_PATTERN_NO_DOLLAR.search(text)
+    if match:
+        limit = "$" + match.group(1)
+        attachment = "$" + match.group(2)
+        return limit.upper(), attachment.upper()
 
-    limit_pattern = r"(\$[\d,.]+[KMBkmb]?)"
-    match = re.search(limit_pattern, text)
+    # Fall back to extracting just a limit
+    match = _LIMIT_PATTERN.search(text)
     if match:
         return match.group(1).upper(), None
 
     return None, None
 
 
-def parse_limit_for_sort(limit_str: str) -> float:
+def parse_limit_for_sort(limit_str: str | None) -> float:
     """Parse limit string to numeric value for sorting."""
     if not limit_str:
         return 0
     cleaned = limit_str.replace("$", "").replace(",", "").upper()
     multiplier = 1
     if cleaned.endswith("M"):
-        multiplier = 1_000_000
+        multiplier = MILLION
         cleaned = cleaned[:-1]
     elif cleaned.endswith("K"):
-        multiplier = 1_000
+        multiplier = THOUSAND
         cleaned = cleaned[:-1]
     elif cleaned.endswith("B"):
-        multiplier = 1_000_000_000
+        multiplier = BILLION
         cleaned = cleaned[:-1]
     try:
         return float(cleaned) * multiplier

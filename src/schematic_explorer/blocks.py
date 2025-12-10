@@ -17,15 +17,14 @@ from .carriers import (
     _is_non_carrier,
     _looks_like_policy_number,
 )
+from .types import MILLION, THOUSAND
+
+# Type alias for inference results
+TypeInference = tuple[str | None, float]
 
 # =============================================================================
 # Constants
 # =============================================================================
-
-# Numeric thresholds for type inference
-MILLION = 1_000_000
-THOUSAND = 1_000
-BILLION = 1_000_000_000
 
 # Percentage thresholds
 PERCENTAGE_WHOLE_NUMBER_THRESHOLD = 1  # Values > 1 are assumed to be whole number %
@@ -93,7 +92,7 @@ class Block:
 # =============================================================================
 
 
-def _infer_numeric_type(value: int | float) -> tuple[str, float]:
+def _infer_numeric_type(value: int | float) -> TypeInference:
     """Infer field type from a numeric value.
 
     Returns:
@@ -113,7 +112,7 @@ def _infer_numeric_type(value: int | float) -> tuple[str, float]:
     return "number", 0.5
 
 
-def _infer_dollar_string_type(val: str, val_lower: str) -> tuple[str, float] | None:
+def _infer_dollar_string_type(val: str, val_lower: str) -> TypeInference | None:
     """Infer field type from a dollar-prefixed string.
 
     Returns:
@@ -136,7 +135,7 @@ def _infer_dollar_string_type(val: str, val_lower: str) -> tuple[str, float] | N
     return None
 
 
-def _infer_carrier_type(val: str, val_lower: str) -> tuple[str, float] | None:
+def _infer_carrier_type(val: str, val_lower: str) -> TypeInference | None:
     """Infer if value looks like a carrier name.
 
     Returns:
@@ -165,7 +164,7 @@ def _infer_carrier_type(val: str, val_lower: str) -> tuple[str, float] | None:
     return None
 
 
-def _infer_type(value) -> tuple[str, float]:
+def _infer_type(value: Any) -> TypeInference:
     """Infer field type and confidence from content alone."""
     if value is None:
         return None, 0.0

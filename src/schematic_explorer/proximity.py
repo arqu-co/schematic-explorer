@@ -9,7 +9,7 @@ This module handles spatial proximity logic:
 
 import re
 
-from .blocks import Block, PERCENTAGE_WHOLE_NUMBER_THRESHOLD
+from .blocks import PERCENTAGE_WHOLE_NUMBER_THRESHOLD, Block
 
 # =============================================================================
 # Constants
@@ -174,7 +174,7 @@ def detect_summary_columns(ws) -> dict:
 # =============================================================================
 
 
-def _normalize_percentage(value) -> float:
+def _normalize_percentage(value: int | float | str | None) -> float | None:
     """Normalize a percentage value to 0-1 range."""
     if value is None:
         return None
@@ -225,7 +225,7 @@ def match_participation_block(
 # =============================================================================
 
 
-def _parse_currency(value) -> float:
+def _parse_currency(value: int | float | str | None) -> float | None:
     """Parse a currency value."""
     if isinstance(value, int | float):
         return float(value)
