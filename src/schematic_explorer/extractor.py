@@ -664,7 +664,7 @@ def _build_entry_from_proximity(
     # Process each block
     for block in sorted_blocks:
         # Skip blocks that aren't relevant to this carrier
-        if not is_block_relevant(block, carrier, carrier_col_range, row_range):
+        if not is_block_relevant(block, carrier, carrier_col_range):
             continue
 
         # Match percentage blocks (participation)

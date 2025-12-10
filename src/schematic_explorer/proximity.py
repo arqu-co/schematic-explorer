@@ -67,7 +67,7 @@ def calculate_block_proximity(block: Block, carrier: Block, carrier_col_range: r
 
 
 def is_block_relevant(
-    block: Block, carrier: Block, carrier_col_range: range, row_range: range
+    block: Block, carrier: Block, carrier_col_range: range
 ) -> bool:
     """Check if a data block is relevant to a carrier based on spatial proximity.
 
