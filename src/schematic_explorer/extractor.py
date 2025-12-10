@@ -16,7 +16,7 @@ import yaml
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from .types import CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
-from .utils import find_merged_range_at, get_cell_color, get_cell_value
+from .utils import build_merged_cell_map, get_cell_color, get_cell_value
 
 # =============================================================================
 # Constants
@@ -458,22 +458,29 @@ def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary 
 
 
 def _find_all_blocks(ws) -> list[Block]:
-    """Find all merged cell regions and significant single cells."""
+    """Find all merged cell regions and significant single cells.
+
+    Uses pre-built merged cell map for O(1) lookups instead of O(n) iteration
+    for each cell, significantly improving performance on large spreadsheets.
+    """
     blocks = []
     processed = set()
+
+    # Pre-build merged cell map for O(1) lookups
+    merged_map = build_merged_cell_map(ws)
 
     for row in range(1, ws.max_row + 1):
         for col in range(1, ws.max_column + 1):
             if (row, col) in processed:
                 continue
 
-            val = get_cell_value(ws, row, col)
+            val = get_cell_value(ws, row, col, merged_map)
             if val is None or (isinstance(val, str) and not val.strip()):
                 processed.add((row, col))
                 continue
 
-            # Check for merged range
-            merged = find_merged_range_at(ws, row, col)
+            # Check for merged range using O(1) lookup
+            merged = merged_map.get((row, col))
             if merged:
                 min_c, min_r, max_c, max_r = range_boundaries(merged)
                 # Only process from top-left
