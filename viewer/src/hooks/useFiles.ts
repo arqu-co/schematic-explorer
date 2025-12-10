@@ -45,8 +45,35 @@ export function useFiles(): UseFilesReturn {
               fetch(getInsightsUrl(stem)).catch(() => null),
             ]);
 
-            const entries: CarrierEntry[] = jsonRes.ok ? await jsonRes.json() : [];
-            const insights = insightsRes?.ok ? await insightsRes.text() : null;
+            // Handle both formats:
+            // - Flat array: [...entries]
+            // - Wrapped object: { entries: [...], verification: {...} }
+            let entries: CarrierEntry[] = [];
+            let insights: string | null = null;
+
+            if (jsonRes.ok) {
+              const data = await jsonRes.json();
+              if (Array.isArray(data)) {
+                // Flat array format (no verification)
+                entries = data;
+              } else if (data.entries) {
+                // Wrapped format with verification
+                entries = data.entries;
+                // Use verification summary as insights if no markdown insights file exists
+                if (data.verification?.summary) {
+                  insights = `**Verification Score:** ${Math.round((data.verification.score || 0) * 100)}%\n\n${data.verification.summary}`;
+                  if (data.verification.issues?.length > 0) {
+                    insights += '\n\n**Issues:**\n' + data.verification.issues.map((i: string) => `- ${i}`).join('\n');
+                  }
+                }
+              }
+            }
+
+            // Markdown insights file takes precedence if it exists
+            const mdInsights = insightsRes?.ok ? await insightsRes.text() : null;
+            if (mdInsights) {
+              insights = mdInsights;
+            }
 
             return { name, stem, entries, insights };
           })
