@@ -91,16 +91,20 @@ class MatchRules:
         gate_config = data.get("gate_short_aliases", {})
         keywords = gate_config.get("require_any_nearby_keywords", [])
 
-        return cls(
-            case_insensitive=data.get("case_insensitive", True),
-            ignore_punctuation=data.get("ignore_punctuation", True),
-            longest_alias_wins=data.get("longest_alias_wins", True),
-            gate_short_aliases=gate_config.get("enabled", True),
-            short_alias_max_len=gate_config.get("max_len", 5),
-            short_alias_keywords=frozenset(kw.lower() for kw in keywords)
-            if keywords
-            else cls.short_alias_keywords,
-        )
+        # Build kwargs, only including short_alias_keywords if explicitly provided
+        kwargs: dict = {
+            "case_insensitive": data.get("case_insensitive", True),
+            "ignore_punctuation": data.get("ignore_punctuation", True),
+            "longest_alias_wins": data.get("longest_alias_wins", True),
+            "gate_short_aliases": gate_config.get("enabled", True),
+            "short_alias_max_len": gate_config.get("max_len", 5),
+        }
+
+        # Only override default keywords if explicitly provided
+        if keywords:
+            kwargs["short_alias_keywords"] = frozenset(kw.lower() for kw in keywords)
+
+        return cls(**kwargs)
 
 
 @dataclass(frozen=True)
