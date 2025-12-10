@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance Tower - Medium B Schematic</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .layer { background: white; border-radius: 8px; margin-bottom: 20px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+        .layer-header { background: #2c3e50; color: white; padding: 12px 20px;
+                        font-weight: bold; font-size: 18px; }
+        .layer-bar { display: flex; height: 60px; }
+        .carrier-block { display: flex; flex-direction: column; justify-content: center;
+                         align-items: center; padding: 8px; color: white; font-size: 12px;
+                         border-right: 1px solid rgba(255,255,255,0.2); overflow: hidden; }
+        .carrier-block:last-child { border-right: none; }
+        .carrier-name { font-weight: bold; white-space: nowrap; overflow: hidden;
+                        text-overflow: ellipsis; max-width: 100%; }
+        .carrier-pct { opacity: 0.9; }
+        .carrier-block:hover { filter: brightness(1.1); cursor: pointer; }
+        .json-section { background: #1e1e1e; border-radius: 8px; margin-top: 40px; }
+        .json-header { background: #333; color: white; padding: 12px 20px;
+                       font-weight: bold; border-radius: 8px 8px 0 0; }
+        pre { color: #d4d4d4; padding: 20px; overflow-x: auto; font-size: 13px;
+              line-height: 1.5; max-height: 500px; overflow-y: auto; }
+        .verify-banner { border-radius: 8px; padding: 20px; margin-bottom: 30px; }
+        .verify-banner.excellent { background: #d4edda; border: 1px solid #28a745; }
+        .verify-banner.good { background: #d1ecf1; border: 1px solid #17a2b8; }
+        .verify-banner.fair { background: #fff3cd; border: 1px solid #ffc107; }
+        .verify-banner.poor { background: #f8d7da; border: 1px solid #dc3545; }
+        .verify-score { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+        .verify-summary { color: #555; }
+        .verify-issues { background: white; border-radius: 8px; padding: 20px;
+                         margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-issues h3 { color: #dc3545; margin-bottom: 12px; }
+        .verify-issues ul { margin-left: 20px; color: #666; }
+        .verify-issues li { margin-bottom: 8px; }
+        .verify-suggestions { background: white; border-radius: 8px; padding: 20px;
+                              margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-suggestions h3 { color: #17a2b8; margin-bottom: 12px; }
+        .verify-suggestions ul { margin-left: 20px; color: #666; }
+        .verify-suggestions li { margin-bottom: 8px; }
+        .insights-section { background: #f8f9fa; border-radius: 8px; padding: 20px;
+                            margin: 20px 0; border: 1px solid #e9ecef; }
+        .insights-section h2 { color: #495057; font-size: 18px; margin-bottom: 15px;
+                               border-bottom: 2px solid #dee2e6; padding-bottom: 10px; }
+        .insights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        @media (max-width: 768px) { .insights-grid { grid-template-columns: 1fr; } }
+        .insight-card { background: white; border-radius: 6px; padding: 15px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+        .insight-card h4 { font-size: 12px; color: #6c757d; margin-bottom: 5px;
+                          text-transform: uppercase; letter-spacing: 0.5px; }
+        .insight-card .count { font-size: 32px; font-weight: bold; }
+        .insight-card.issues .count { color: #dc3545; }
+        .insight-card.suggestions .count { color: #17a2b8; }
+        .insight-card.visual .count { color: #6f42c1; }
+        .insight-list { margin-top: 20px; }
+        .insight-list h4 { font-size: 14px; margin-bottom: 10px; padding-bottom: 8px;
+                          border-bottom: 1px solid #dee2e6; }
+        .insight-list h4.issues-header { color: #dc3545; }
+        .insight-list h4.visual-header { color: #6f42c1; }
+        .insight-list h4.suggestions-header { color: #17a2b8; }
+        .insight-item { padding: 10px 12px; border-left: 3px solid #dee2e6;
+                        margin-bottom: 8px; font-size: 13px; background: #fff;
+                        border-radius: 0 4px 4px 0; }
+        .insight-item.issue { border-left-color: #dc3545; }
+        .insight-item.suggestion { border-left-color: #17a2b8; }
+        .insight-item.visual { border-left-color: #6f42c1; }
+        .carrier-details { padding: 15px 20px; border-top: 1px solid #eee; }
+        .carrier-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .carrier-table th { text-align: left; padding: 8px 12px; background: #f8f9fa;
+                           border-bottom: 2px solid #dee2e6; color: #495057; }
+        .carrier-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+        .carrier-table tr:hover { background: #f8f9fa; }
+        .carrier-table .carrier-name-cell { font-weight: 600; color: #2c3e50; }
+        .carrier-table .number { text-align: right; font-family: monospace; }
+        .carrier-table .terms-cell { font-size: 12px; color: #666; max-width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Insurance Tower - Medium B Schematic</h1>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $170M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Great American - 100.0%">
+                    <span class="carrier-name">Great American</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Great American</td>
+                            <td>$70M x/s $100M</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$35,000</td>
+                            <td class="number">$35,000</td>
+                            <td class="terms-cell">All Risk  and excluding Earthquake, EQSL & Flood, and Terrorism</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $115M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Arrowhead - 100.0%">
+                    <span class="carrier-name">Arrowhead</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Arrowhead</td>
+                            <td>$30,000,000 excess of $85,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$105,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $85M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="RLI - 100.0%">
+                    <span class="carrier-name">RLI</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">RLI</td>
+                            <td>$10,000,000 excess of $75,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$31,265</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $75M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Crum & Forster - 100.0%">
+                    <span class="carrier-name">Crum & Forster</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Crum & Forster</td>
+                            <td>$10,000,000 excess of $65,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$61,140</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $65M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Northshore - 100.0%">
+                    <span class="carrier-name">Northshore</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Northshore</td>
+                            <td>$20,000,000 excess of $45,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$108,200</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including EQ, EQSL, Flood (ex A&V)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $45M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="JEM - 100.0%">
+                    <span class="carrier-name">JEM</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">JEM</td>
+                            <td>$5,000,000 xs $40,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$71,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including EQ, EQSL and Flood</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $40M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Arch - 100.0%">
+                    <span class="carrier-name">Arch</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Arch</td>
+                            <td>$10,000,000 xs $30,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$140,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including EQ, EQSL and Flood</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $30M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 75.0%; background: #3498db;"
+                     title="Vicko - 75.0%">
+                    <span class="carrier-name">Vicko</span>
+                    <span class="carrier-pct">75%</span>
+                </div>
+                <div class="carrier-block" style="width: 25.0%; background: #2ecc71;"
+                     title="Commonwealth - 25.0%">
+                    <span class="carrier-name">Commonwealth</span>
+                    <span class="carrier-pct">25%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Vicko</td>
+                            <td>$10,000,000 xs $20,000,000</td>
+                            <td class="number">75.0%</td>
+                            <td class="number">$173,375</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including EQ, EQSL and Flood</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Commonwealth</td>
+                            <td>—</td>
+                            <td class="number">25.0%</td>
+                            <td class="number">$51,875</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $20M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Golden Bear - 100.0%">
+                    <span class="carrier-name">Golden Bear</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+                <div class="carrier-block" style="width: 100.0%; background: #2ecc71;"
+                     title="One Beacon - 100.0%">
+                    <span class="carrier-name">One Beacon</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Golden Bear</td>
+                            <td>$10,000,000 xs $10,000,000</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$250,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">DIC including EQ, EQSL and Flood</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">One Beacon</td>
+                            <td>—</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$75,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $10M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 75.0%; background: #3498db;"
+                     title="Lexington - 75.0%">
+                    <span class="carrier-name">Lexington</span>
+                    <span class="carrier-pct">75%</span>
+                </div>
+                <div class="carrier-block" style="width: 25.0%; background: #2ecc71;"
+                     title="Kemah/National Fire & Marine - 25.0%">
+                    <span class="carrier-name">Kemah/National Fire & Mar...</span>
+                    <span class="carrier-pct">25%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Lexington</td>
+                            <td>—</td>
+                            <td class="number">75.0%</td>
+                            <td class="number">$998,250</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Lex Form $25k deductible on Superior Construction</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Kemah/National Fire & Marine</td>
+                            <td>—</td>
+                            <td class="number">25.0%</td>
+                            <td class="number">$375,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $10k</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 100.0%; background: #3498db;"
+                     title="Ategrity - New - 100.0%">
+                    <span class="carrier-name">Ategrity - New</span>
+                    <span class="carrier-pct">100%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Ategrity - New</td>
+                            <td>$90,000 xs $10,000 with 6x or $540k agg</td>
+                            <td class="number">100.0%</td>
+                            <td class="number">$315,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">AOP Ded Buy Down excluding Earthquake/EQSL, Flood, and Terrorism</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="json-section">
+            <div class="json-header">Raw JSON Data</div>
+            <pre>[
+  {
+    "layer_limit": "$170M",
+    "layer_description": "$70M x/s $100M",
+    "carrier": "Great American",
+    "participation_pct": 1.0,
+    "premium": 35000.0,
+    "premium_share": 35000.0,
+    "terms": "All Risk  and excluding Earthquake, EQSL & Flood, and Terrorism",
+    "policy_number": null,
+    "excel_range": "B8",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FF99FFCC",
+    "attachment_point": "$100M"
+  },
+  {
+    "layer_limit": "$115M",
+    "layer_description": "$30,000,000 excess of $85,000,000",
+    "carrier": "Arrowhead",
+    "participation_pct": 1.0,
+    "premium": 105000.0,
+    "premium_share": null,
+    "terms": "DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism",
+    "policy_number": null,
+    "excel_range": "B20",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFFFFF99",
+    "attachment_point": "$85,000,000"
+  },
+  {
+    "layer_limit": "$85M",
+    "layer_description": "$10,000,000 excess of $75,000,000",
+    "carrier": "RLI",
+    "participation_pct": 1.0,
+    "premium": 31265.0,
+    "premium_share": null,
+    "terms": "DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism",
+    "policy_number": null,
+    "excel_range": "B32",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFFF9999",
+    "attachment_point": "$75,000,000"
+  },
+  {
+    "layer_limit": "$75M",
+    "layer_description": "$10,000,000 excess of $65,000,000",
+    "carrier": "Crum & Forster",
+    "participation_pct": 1.0,
+    "premium": 61140.0,
+    "premium_share": null,
+    "terms": "DIC including Earthquake, EQSL and Flood (ex A&V) excluding Terrorism",
+    "policy_number": null,
+    "excel_range": "B42",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFD37DEB",
+    "attachment_point": "$65,000,000"
+  },
+  {
+    "layer_limit": "$65M",
+    "layer_description": "$20,000,000 excess of $45,000,000",
+    "carrier": "Northshore",
+    "participation_pct": 1.0,
+    "premium": 108200.0,
+    "premium_share": null,
+    "terms": "DIC including EQ, EQSL, Flood (ex A&V)",
+    "policy_number": null,
+    "excel_range": "B55",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$45,000,000"
+  },
+  {
+    "layer_limit": "$45M",
+    "layer_description": "$5,000,000 xs $40,000,000",
+    "carrier": "JEM",
+    "participation_pct": 1.0,
+    "premium": 71000.0,
+    "premium_share": null,
+    "terms": "DIC including EQ, EQSL and Flood",
+    "policy_number": null,
+    "excel_range": "B65",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$40,000,000"
+  },
+  {
+    "layer_limit": "$40M",
+    "layer_description": "$10,000,000 xs $30,000,000",
+    "carrier": "Arch",
+    "participation_pct": 1.0,
+    "premium": 140000.0,
+    "premium_share": null,
+    "terms": "DIC including EQ, EQSL and Flood",
+    "policy_number": null,
+    "excel_range": "B75",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$30,000,000"
+  },
+  {
+    "layer_limit": "$30M",
+    "layer_description": "$10,000,000 xs $20,000,000",
+    "carrier": "Vicko",
+    "participation_pct": 0.75,
+    "premium": 173375.25,
+    "premium_share": null,
+    "terms": "DIC including EQ, EQSL and Flood",
+    "policy_number": null,
+    "excel_range": "B87",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$20,000,000"
+  },
+  {
+    "layer_limit": "$30M",
+    "layer_description": "",
+    "carrier": "Commonwealth",
+    "participation_pct": 0.25,
+    "premium": 51875.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E87",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFFF2D2D",
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$20M",
+    "layer_description": "$10,000,000 xs $10,000,000",
+    "carrier": "Golden Bear",
+    "participation_pct": 1.0,
+    "premium": 250000.0,
+    "premium_share": null,
+    "terms": "DIC including EQ, EQSL and Flood",
+    "policy_number": null,
+    "excel_range": "B102",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FF66CCFF",
+    "attachment_point": "$10,000,000"
+  },
+  {
+    "layer_limit": "$20M",
+    "layer_description": "",
+    "carrier": "One Beacon",
+    "participation_pct": 1.0,
+    "premium": 75000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "G102",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "",
+    "carrier": "Lexington",
+    "participation_pct": 0.75,
+    "premium": 998250.0,
+    "premium_share": null,
+    "terms": "Lex Form $25k deductible on Superior Construction",
+    "policy_number": null,
+    "excel_range": "B116",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFFF9966",
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "",
+    "carrier": "Kemah/National Fire & Marine",
+    "participation_pct": 0.25,
+    "premium": 375000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E116",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFFF4F4F",
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10k",
+    "layer_description": "$90,000 xs $10,000 with 6x or $540k agg",
+    "carrier": "Ategrity - New",
+    "participation_pct": 1.0,
+    "premium": 315000.0,
+    "premium_share": null,
+    "terms": "AOP Ded Buy Down excluding Earthquake/EQSL, Flood, and Terrorism",
+    "policy_number": null,
+    "excel_range": "B125",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": "FFCCECFF",
+    "attachment_point": "$10,000"
+  }
+]</pre>
+        </div>
+    </div>
+</body>
+</html>

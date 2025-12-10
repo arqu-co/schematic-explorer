@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance Tower - Hard Schematic</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .layer { background: white; border-radius: 8px; margin-bottom: 20px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+        .layer-header { background: #2c3e50; color: white; padding: 12px 20px;
+                        font-weight: bold; font-size: 18px; }
+        .layer-bar { display: flex; height: 60px; }
+        .carrier-block { display: flex; flex-direction: column; justify-content: center;
+                         align-items: center; padding: 8px; color: white; font-size: 12px;
+                         border-right: 1px solid rgba(255,255,255,0.2); overflow: hidden; }
+        .carrier-block:last-child { border-right: none; }
+        .carrier-name { font-weight: bold; white-space: nowrap; overflow: hidden;
+                        text-overflow: ellipsis; max-width: 100%; }
+        .carrier-pct { opacity: 0.9; }
+        .carrier-block:hover { filter: brightness(1.1); cursor: pointer; }
+        .json-section { background: #1e1e1e; border-radius: 8px; margin-top: 40px; }
+        .json-header { background: #333; color: white; padding: 12px 20px;
+                       font-weight: bold; border-radius: 8px 8px 0 0; }
+        pre { color: #d4d4d4; padding: 20px; overflow-x: auto; font-size: 13px;
+              line-height: 1.5; max-height: 500px; overflow-y: auto; }
+        .verify-banner { border-radius: 8px; padding: 20px; margin-bottom: 30px; }
+        .verify-banner.excellent { background: #d4edda; border: 1px solid #28a745; }
+        .verify-banner.good { background: #d1ecf1; border: 1px solid #17a2b8; }
+        .verify-banner.fair { background: #fff3cd; border: 1px solid #ffc107; }
+        .verify-banner.poor { background: #f8d7da; border: 1px solid #dc3545; }
+        .verify-score { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+        .verify-summary { color: #555; }
+        .verify-issues { background: white; border-radius: 8px; padding: 20px;
+                         margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-issues h3 { color: #dc3545; margin-bottom: 12px; }
+        .verify-issues ul { margin-left: 20px; color: #666; }
+        .verify-issues li { margin-bottom: 8px; }
+        .verify-suggestions { background: white; border-radius: 8px; padding: 20px;
+                              margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-suggestions h3 { color: #17a2b8; margin-bottom: 12px; }
+        .verify-suggestions ul { margin-left: 20px; color: #666; }
+        .verify-suggestions li { margin-bottom: 8px; }
+        .insights-section { background: #f8f9fa; border-radius: 8px; padding: 20px;
+                            margin: 20px 0; border: 1px solid #e9ecef; }
+        .insights-section h2 { color: #495057; font-size: 18px; margin-bottom: 15px;
+                               border-bottom: 2px solid #dee2e6; padding-bottom: 10px; }
+        .insights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        @media (max-width: 768px) { .insights-grid { grid-template-columns: 1fr; } }
+        .insight-card { background: white; border-radius: 6px; padding: 15px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+        .insight-card h4 { font-size: 12px; color: #6c757d; margin-bottom: 5px;
+                          text-transform: uppercase; letter-spacing: 0.5px; }
+        .insight-card .count { font-size: 32px; font-weight: bold; }
+        .insight-card.issues .count { color: #dc3545; }
+        .insight-card.suggestions .count { color: #17a2b8; }
+        .insight-card.visual .count { color: #6f42c1; }
+        .insight-list { margin-top: 20px; }
+        .insight-list h4 { font-size: 14px; margin-bottom: 10px; padding-bottom: 8px;
+                          border-bottom: 1px solid #dee2e6; }
+        .insight-list h4.issues-header { color: #dc3545; }
+        .insight-list h4.visual-header { color: #6f42c1; }
+        .insight-list h4.suggestions-header { color: #17a2b8; }
+        .insight-item { padding: 10px 12px; border-left: 3px solid #dee2e6;
+                        margin-bottom: 8px; font-size: 13px; background: #fff;
+                        border-radius: 0 4px 4px 0; }
+        .insight-item.issue { border-left-color: #dc3545; }
+        .insight-item.suggestion { border-left-color: #17a2b8; }
+        .insight-item.visual { border-left-color: #6f42c1; }
+        .carrier-details { padding: 15px 20px; border-top: 1px solid #eee; }
+        .carrier-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .carrier-table th { text-align: left; padding: 8px 12px; background: #f8f9fa;
+                           border-bottom: 2px solid #dee2e6; color: #495057; }
+        .carrier-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+        .carrier-table tr:hover { background: #f8f9fa; }
+        .carrier-table .carrier-name-cell { font-weight: 600; color: #2c3e50; }
+        .carrier-table .number { text-align: right; font-family: monospace; }
+        .carrier-table .terms-cell { font-size: 12px; color: #666; max-width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Insurance Tower - Hard Schematic</h1>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $250M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 50.0%; background: #3498db;"
+                     title="Chubb Bermuda - 50.0%">
+                    <span class="carrier-name">Chubb Bermuda</span>
+                    <span class="carrier-pct">50%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Core (Alliant Re) - 20.0%">
+                    <span class="carrier-name">Core (Alliant Re)</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #e74c3c;"
+                     title="Starstone Specialty Ins. Co. - 20.0%">
+                    <span class="carrier-name">Starstone Specialty Ins. ...</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #9b59b6;"
+                     title="Fidelis - 20.0%">
+                    <span class="carrier-name">Fidelis</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Lexington Insurance Company - 10.0%">
+                    <span class="carrier-name">Lexington Insurance Compa...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Chubb Bermuda</td>
+                            <td>—</td>
+                            <td class="number">50.0%</td>
+                            <td class="number">$50,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Core (Alliant Re)</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$20,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starstone Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$20,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Fidelis</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$20,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lexington Insurance Company</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$10,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $150M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 24.0%; background: #3498db;"
+                     title="Fidelis - 24.0%">
+                    <span class="carrier-name">Fidelis</span>
+                    <span class="carrier-pct">24%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Kinsale Insurance Company - 20.0%">
+                    <span class="carrier-name">Kinsale Insurance Company</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #e74c3c;"
+                     title="Starr Surplus Lines Ins. Co. (Alliant Re) - 20.0%">
+                    <span class="carrier-name">Starr Surplus Lines Ins. ...</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #9b59b6;"
+                     title="Palms Specialty Ins. Co. (Risksmith) - 10.0%">
+                    <span class="carrier-name">Palms Specialty Ins. Co. ...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Obsidian Specialty Insurance Company - 10.0%">
+                    <span class="carrier-name">Obsidian Specialty Insura...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 9.0%; background: #1abc9c;"
+                     title="London (Lancashire 5%, NOA 4%) - 9.0%">
+                    <span class="carrier-name">London (Lancashire 5%, NO...</span>
+                    <span class="carrier-pct">9%</span>
+                </div>
+                <div class="carrier-block" style="width: 7.000000000000001%; background: #e67e22;"
+                     title="Alcor - 7.0%">
+                    <span class="carrier-name">Alcor</span>
+                    <span class="carrier-pct">7%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Fidelis</td>
+                            <td>—</td>
+                            <td class="number">24.0%</td>
+                            <td class="number">$12,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Kinsale Insurance Company</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$10,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starr Surplus Lines Ins. Co. (Alliant Re)</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$10,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Palms Specialty Ins. Co. (Risksmith)</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Obsidian Specialty Insurance Company</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London (Lancashire 5%, NOA 4%)</td>
+                            <td>—</td>
+                            <td class="number">9.0%</td>
+                            <td class="number">$4,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Alcor</td>
+                            <td>—</td>
+                            <td class="number">7.0%</td>
+                            <td class="number">$3,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $100M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 19.33%; background: #3498db;"
+                     title="London (BRT 2.85%, AFB 5.34%, ARK 2.85%, IGO 2.14%, AML 2.14%, Ki 2.85%, Auto 1.17%) - 19.3%">
+                    <span class="carrier-name">London (BRT 2.85%, AFB 5....</span>
+                    <span class="carrier-pct">19%</span>
+                </div>
+                <div class="carrier-block" style="width: 15.0%; background: #2ecc71;"
+                     title="Fidelis - 15.0%">
+                    <span class="carrier-name">Fidelis</span>
+                    <span class="carrier-pct">15%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e74c3c;"
+                     title="Core - 10.0%">
+                    <span class="carrier-name">Core</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #9b59b6;"
+                     title="Endurance American Specialty Ins. Co. (Sompo) - 10.0%">
+                    <span class="carrier-name">Endurance American Specia...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Partner Re Insurance Solutions of Bermuda Ltd. - 10.0%">
+                    <span class="carrier-name">Partner Re Insurance Solu...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #1abc9c;"
+                     title="Superior Specialty Ins. Co. - 10.0%">
+                    <span class="carrier-name">Superior Specialty Ins. C...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e67e22;"
+                     title="Western World Ins. Co. - 10.0%">
+                    <span class="carrier-name">Western World Ins. Co.</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #34495e;"
+                     title="Palomar Excess & Surplus Ins. Co. - 10.0%">
+                    <span class="carrier-name">Palomar Excess & Surplus ...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #3498db;"
+                     title="Dellwood Specialty Ins. Co. - 10.0%">
+                    <span class="carrier-name">Dellwood Specialty Ins. C...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #2ecc71;"
+                     title="Certain Underwriters at Lloyd's - 10.0%">
+                    <span class="carrier-name">Certain Underwriters at L...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e74c3c;"
+                     title="Westchester Surplus Lines Ins. Co. - 10.0%">
+                    <span class="carrier-name">Westchester Surplus Lines...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #9b59b6;"
+                     title="Starstone Specialty Ins. Co. - 10.0%">
+                    <span class="carrier-name">Starstone Specialty Ins. ...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 9.0%; background: #f39c12;"
+                     title="London (WBC 3%, TAL 6%) - 9.0%">
+                    <span class="carrier-name">London (WBC 3%, TAL 6%)</span>
+                    <span class="carrier-pct">9%</span>
+                </div>
+                <div class="carrier-block" style="width: 6.67%; background: #1abc9c;"
+                     title="Westfield Specialty Ins. Co. - 6.7%">
+                    <span class="carrier-name">Westfield Specialty Ins. ...</span>
+                    <span class="carrier-pct">7%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #e67e22;"
+                     title="Starr Surplus Lines Ins. Co. (Alliant Re) - 5.0%">
+                    <span class="carrier-name">Starr Surplus Lines Ins. ...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #34495e;"
+                     title="Crum & Forster Specialty Ins. Co. - 5.0%">
+                    <span class="carrier-name">Crum & Forster Specialty ...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">London (BRT 2.85%, AFB 5.34%, ARK 2.85%, IGO 2.14%, AML 2.14%, Ki 2.85%, Auto 1.17%)</td>
+                            <td>—</td>
+                            <td class="number">19.3%</td>
+                            <td class="number">$9,665,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Fidelis</td>
+                            <td>—</td>
+                            <td class="number">15.0%</td>
+                            <td class="number">$7,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Core</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Endurance American Specialty Ins. Co. (Sompo)</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Partner Re Insurance Solutions of Bermuda Ltd.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Superior Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Western World Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Palomar Excess & Surplus Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Dellwood Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Certain Underwriters at Lloyd's</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Westchester Surplus Lines Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starstone Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London (WBC 3%, TAL 6%)</td>
+                            <td>—</td>
+                            <td class="number">9.0%</td>
+                            <td class="number">$6,750,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Westfield Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">6.7%</td>
+                            <td class="number">$5,002,500</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starr Surplus Lines Ins. Co. (Alliant Re)</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Crum & Forster Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$3,750,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $50M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 26.0%; background: #3498db;"
+                     title="Canopious US Insurance, Inc. - 26.0%">
+                    <span class="carrier-name">Canopious US Insurance, I...</span>
+                    <span class="carrier-pct">26%</span>
+                </div>
+                <div class="carrier-block" style="width: 22.33%; background: #2ecc71;"
+                     title="London (CGM 3.06%, AXA XL 6.12%, Alchemy 3.67%, CIN 5%, Ki 2.45%, Auto 2.02) - 22.3%">
+                    <span class="carrier-name">London (CGM 3.06%, AXA XL...</span>
+                    <span class="carrier-pct">22%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e74c3c;"
+                     title="London - Fidelis - 10.0%">
+                    <span class="carrier-name">London - Fidelis</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #9b59b6;"
+                     title="Velocity - 5.0%">
+                    <span class="carrier-name">Velocity</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #f39c12;"
+                     title="CNA - 5.0%">
+                    <span class="carrier-name">CNA</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #1abc9c;"
+                     title="Zurich - 5.0%">
+                    <span class="carrier-name">Zurich</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #e67e22;"
+                     title="United Specialty Insurance Co. - 5.0%">
+                    <span class="carrier-name">United Specialty Insuranc...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #34495e;"
+                     title="Lloyd's of London - 5.0%">
+                    <span class="carrier-name">Lloyd's of London</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #3498db;"
+                     title="Velocity Specialty Insurance Co. - 5.0%">
+                    <span class="carrier-name">Velocity Specialty Insura...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #2ecc71;"
+                     title="National Fire & Marine Ins. Co. - 5.0%">
+                    <span class="carrier-name">National Fire & Marine In...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #e74c3c;"
+                     title="Fortegra Specialty Ins. Co, - 5.0%">
+                    <span class="carrier-name">Fortegra Specialty Ins. C...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #9b59b6;"
+                     title="Emerald Bay Specialty Ins. Co. - 5.0%">
+                    <span class="carrier-name">Emerald Bay Specialty Ins...</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #f39c12;"
+                     title="Columbia Casualty  Co. - 5.0%">
+                    <span class="carrier-name">Columbia Casualty  Co.</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 5.0%; background: #1abc9c;"
+                     title="Steadfast Ins. Co. - 5.0%">
+                    <span class="carrier-name">Steadfast Ins. Co.</span>
+                    <span class="carrier-pct">5%</span>
+                </div>
+                <div class="carrier-block" style="width: 3.0%; background: #e67e22;"
+                     title="Axis Surplus Ins. Co. - 3.0%">
+                    <span class="carrier-name">Axis Surplus Ins. Co.</span>
+                    <span class="carrier-pct">3%</span>
+                </div>
+                <div class="carrier-block" style="width: 3.0%; background: #34495e;"
+                     title="Sutton Specialty Ins. Co. (Kemah) - 3.0%">
+                    <span class="carrier-name">Sutton Specialty Ins. Co....</span>
+                    <span class="carrier-pct">3%</span>
+                </div>
+                <div class="carrier-block" style="width: 3.0%; background: #3498db;"
+                     title="Specialty Builders Insurance Co. - 3.0%">
+                    <span class="carrier-name">Specialty Builders Insura...</span>
+                    <span class="carrier-pct">3%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Canopious US Insurance, Inc.</td>
+                            <td>—</td>
+                            <td class="number">26.0%</td>
+                            <td class="number">$6,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London (CGM 3.06%, AXA XL 6.12%, Alchemy 3.67%, CIN 5%, Ki 2.45%, Auto 2.02)</td>
+                            <td>—</td>
+                            <td class="number">22.3%</td>
+                            <td class="number">$5,582,500</td>
+                            <td class="number">$50,000,000</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London - Fidelis</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">$50,000,000</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Velocity</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">CNA</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Zurich</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">United Specialty Insurance Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's of London</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Velocity Specialty Insurance Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">National Fire & Marine Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Fortegra Specialty Ins. Co,</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Emerald Bay Specialty Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Columbia Casualty  Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Steadfast Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">5.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Axis Surplus Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">3.0%</td>
+                            <td class="number">$1,500,000</td>
+                            <td class="number">$50,000,000</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Sutton Specialty Ins. Co. (Kemah)</td>
+                            <td>—</td>
+                            <td class="number">3.0%</td>
+                            <td class="number">$1,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Specialty Builders Insurance Co.</td>
+                            <td>—</td>
+                            <td class="number">3.0%</td>
+                            <td class="number">$1,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $25M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 22.5%; background: #3498db;"
+                     title="Lexington Insurance Company - 22.5%">
+                    <span class="carrier-name">Lexington Insurance Compa...</span>
+                    <span class="carrier-pct">22%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Westchester Surplus Lines Ins. Co. - 20.0%">
+                    <span class="carrier-name">Westchester Surplus Lines...</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 12.5%; background: #e74c3c;"
+                     title="London (DUW 4.5%, AES 4.5%, Sompo 2.08%, AML .83%, Ki .17%, Auto .78%) - 12.5%">
+                    <span class="carrier-name">London (DUW 4.5%, AES 4.5...</span>
+                    <span class="carrier-pct">12%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #9b59b6;"
+                     title="London - Fidelis - 10.0%">
+                    <span class="carrier-name">London - Fidelis</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Starr Surplus Lines Ins. Co - 10.0%">
+                    <span class="carrier-name">Starr Surplus Lines Ins. ...</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #1abc9c;"
+                     title="AmWins ATL - 10.0%">
+                    <span class="carrier-name">AmWins ATL</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 4.0%; background: #e67e22;"
+                     title="Allied World Assurance Co. - 4.0%">
+                    <span class="carrier-name">Allied World Assurance Co...</span>
+                    <span class="carrier-pct">4%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Lexington Insurance Company</td>
+                            <td>—</td>
+                            <td class="number">22.5%</td>
+                            <td class="number">$5,625,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Westchester Surplus Lines Ins. Co.</td>
+                            <td>—</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$5,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London (DUW 4.5%, AES 4.5%, Sompo 2.08%, AML .83%, Ki .17%, Auto .78%)</td>
+                            <td>—</td>
+                            <td class="number">12.5%</td>
+                            <td class="number">$3,125,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">London - Fidelis</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starr Surplus Lines Ins. Co</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">AmWins ATL</td>
+                            <td>—</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$2,500,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Allied World Assurance Co.</td>
+                            <td>—</td>
+                            <td class="number">4.0%</td>
+                            <td class="number">$1,000,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">PROGRAM DEDUCTIBLES
+AOP: $100,000
+CA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000
+Florida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000
+SFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="json-section">
+            <div class="json-header">Raw JSON Data</div>
+            <pre>[
+  {
+    "layer_limit": "$250M",
+    "layer_description": "",
+    "carrier": "Core (Alliant Re)",
+    "participation_pct": 0.2,
+    "premium": 20000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "H6",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$250M",
+    "layer_description": "",
+    "carrier": "Chubb Bermuda",
+    "participation_pct": 0.5,
+    "premium": 50000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E7",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$250M",
+    "layer_description": "",
+    "carrier": "Starstone Specialty Ins. Co.",
+    "participation_pct": 0.2,
+    "premium": 20000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "H7",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$250M",
+    "layer_description": "",
+    "carrier": "Lexington Insurance Company",
+    "participation_pct": 0.1,
+    "premium": 10000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "J7",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$250M",
+    "layer_description": "",
+    "carrier": "Fidelis",
+    "participation_pct": 0.2,
+    "premium": 20000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "L7",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Fidelis",
+    "participation_pct": 0.24,
+    "premium": 12000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "B17",
+    "col_span": 3,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Palms Specialty Ins. Co. (Risksmith)",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E17",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Kinsale Insurance Company",
+    "participation_pct": 0.2,
+    "premium": 10000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F17",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Starr Surplus Lines Ins. Co. (Alliant Re)",
+    "participation_pct": 0.2,
+    "premium": 10000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "H17",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Obsidian Specialty Insurance Company",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "J17",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "London (Lancashire 5%, NOA 4%)",
+    "participation_pct": 0.09,
+    "premium": 4500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "K17",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "",
+    "carrier": "Alcor",
+    "participation_pct": 0.07,
+    "premium": 3500000.0000000005,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "L17",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Core",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "I25",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Fidelis",
+    "participation_pct": 0.15,
+    "premium": 7500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "B26",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Endurance American Specialty Ins. Co. (Sompo)",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "D26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Partner Re Insurance Solutions of Bermuda Ltd.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Superior Specialty Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Western World Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Palomar Excess & Surplus Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Dellwood Specialty Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Certain Underwriters at Lloyd's",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Westchester Surplus Lines Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Starr Surplus Lines Ins. Co. (Alliant Re)",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "G26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "London (BRT 2.85%, AFB 5.34%, ARK 2.85%, IGO 2.14%, AML 2.14%, Ki 2.85%, Auto 1.17%)",
+    "participation_pct": 0.1933,
+    "premium": 9665000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "H26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Starstone Specialty Ins. Co.",
+    "participation_pct": 0.1,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "I26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Crum & Forster Specialty Ins. Co.",
+    "participation_pct": 0.05,
+    "premium": 3750000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "J26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "London (WBC 3%, TAL 6%)",
+    "participation_pct": 0.09,
+    "premium": 6750000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "K26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "",
+    "carrier": "Westfield Specialty Ins. Co.",
+    "participation_pct": 0.0667,
+    "premium": 5002500.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "L26",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Velocity",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F38",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "CNA",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "G38",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Zurich",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "I38",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "London - Fidelis",
+    "participation_pct": 0.1,
+    "premium": 2500000.0,
+    "premium_share": 50000000.0,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "B39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "London (CGM 3.06%, AXA XL 6.12%, Alchemy 3.67%, CIN 5%, Ki 2.45%, Auto 2.02)",
+    "participation_pct": 0.2233,
+    "premium": 5582500.0,
+    "premium_share": 50000000.0,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "C39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Axis Surplus Ins. Co.",
+    "participation_pct": 0.03,
+    "premium": 1500000.0,
+    "premium_share": 50000000.0,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "D39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Sutton Specialty Ins. Co. (Kemah)",
+    "participation_pct": 0.03,
+    "premium": 1500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Specialty Builders Insurance Co.",
+    "participation_pct": 0.03,
+    "premium": 1500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "E39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "United Specialty Insurance Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Lloyd's of London",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Velocity Specialty Insurance Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "National Fire & Marine Ins. Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Fortegra Specialty Ins. Co,",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Emerald Bay Specialty Ins. Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "F39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Columbia Casualty  Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "G39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Canopious US Insurance, Inc.",
+    "participation_pct": 0.26,
+    "premium": 6500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "H39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "",
+    "carrier": "Steadfast Ins. Co.",
+    "participation_pct": 0.05,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": null,
+    "policy_number": null,
+    "excel_range": "I39",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "London - Fidelis",
+    "participation_pct": 0.1,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "B47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "London (DUW 4.5%, AES 4.5%, Sompo 2.08%, AML .83%, Ki .17%, Auto .78%)",
+    "participation_pct": 0.125,
+    "premium": 3125000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "C47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "Lexington Insurance Company",
+    "participation_pct": 0.225,
+    "premium": 5625000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "H47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "Westchester Surplus Lines Ins. Co.",
+    "participation_pct": 0.2,
+    "premium": 5000000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "J47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "Allied World Assurance Co.",
+    "participation_pct": 0.04,
+    "premium": 1000000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "K47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "Starr Surplus Lines Ins. Co",
+    "participation_pct": 0.1,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "L47",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "",
+    "carrier": "AmWins ATL",
+    "participation_pct": 0.1,
+    "premium": 2500000.0,
+    "premium_share": null,
+    "terms": "PROGRAM DEDUCTIBLES\nAOP: $100,000\nCA/AK/HI Earthquake: 5% min. $250,000; PNW Earthquake: 2% min. $100,000; New Madrid EQ: 2% min. $100,000; All Other EQ: $100,000\nFlorida (Tri-County): 5% min $100,000; All Other Florida 3% min $100,000; All Other Tier I: 2% min $100,000\nSFHA Flood: Max NFIP otherwise $250,000 per building; All Other Flood: $100,000",
+    "policy_number": null,
+    "excel_range": "B64",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  }
+]</pre>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance Tower - Sample Tower BC</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .layer { background: white; border-radius: 8px; margin-bottom: 20px;
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+        .layer-header { background: #2c3e50; color: white; padding: 12px 20px;
+                        font-weight: bold; font-size: 18px; }
+        .layer-bar { display: flex; height: 60px; }
+        .carrier-block { display: flex; flex-direction: column; justify-content: center;
+                         align-items: center; padding: 8px; color: white; font-size: 12px;
+                         border-right: 1px solid rgba(255,255,255,0.2); overflow: hidden; }
+        .carrier-block:last-child { border-right: none; }
+        .carrier-name { font-weight: bold; white-space: nowrap; overflow: hidden;
+                        text-overflow: ellipsis; max-width: 100%; }
+        .carrier-pct { opacity: 0.9; }
+        .carrier-block:hover { filter: brightness(1.1); cursor: pointer; }
+        .json-section { background: #1e1e1e; border-radius: 8px; margin-top: 40px; }
+        .json-header { background: #333; color: white; padding: 12px 20px;
+                       font-weight: bold; border-radius: 8px 8px 0 0; }
+        pre { color: #d4d4d4; padding: 20px; overflow-x: auto; font-size: 13px;
+              line-height: 1.5; max-height: 500px; overflow-y: auto; }
+        .verify-banner { border-radius: 8px; padding: 20px; margin-bottom: 30px; }
+        .verify-banner.excellent { background: #d4edda; border: 1px solid #28a745; }
+        .verify-banner.good { background: #d1ecf1; border: 1px solid #17a2b8; }
+        .verify-banner.fair { background: #fff3cd; border: 1px solid #ffc107; }
+        .verify-banner.poor { background: #f8d7da; border: 1px solid #dc3545; }
+        .verify-score { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+        .verify-summary { color: #555; }
+        .verify-issues { background: white; border-radius: 8px; padding: 20px;
+                         margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-issues h3 { color: #dc3545; margin-bottom: 12px; }
+        .verify-issues ul { margin-left: 20px; color: #666; }
+        .verify-issues li { margin-bottom: 8px; }
+        .verify-suggestions { background: white; border-radius: 8px; padding: 20px;
+                              margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .verify-suggestions h3 { color: #17a2b8; margin-bottom: 12px; }
+        .verify-suggestions ul { margin-left: 20px; color: #666; }
+        .verify-suggestions li { margin-bottom: 8px; }
+        .insights-section { background: #f8f9fa; border-radius: 8px; padding: 20px;
+                            margin: 20px 0; border: 1px solid #e9ecef; }
+        .insights-section h2 { color: #495057; font-size: 18px; margin-bottom: 15px;
+                               border-bottom: 2px solid #dee2e6; padding-bottom: 10px; }
+        .insights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        @media (max-width: 768px) { .insights-grid { grid-template-columns: 1fr; } }
+        .insight-card { background: white; border-radius: 6px; padding: 15px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+        .insight-card h4 { font-size: 12px; color: #6c757d; margin-bottom: 5px;
+                          text-transform: uppercase; letter-spacing: 0.5px; }
+        .insight-card .count { font-size: 32px; font-weight: bold; }
+        .insight-card.issues .count { color: #dc3545; }
+        .insight-card.suggestions .count { color: #17a2b8; }
+        .insight-card.visual .count { color: #6f42c1; }
+        .insight-list { margin-top: 20px; }
+        .insight-list h4 { font-size: 14px; margin-bottom: 10px; padding-bottom: 8px;
+                          border-bottom: 1px solid #dee2e6; }
+        .insight-list h4.issues-header { color: #dc3545; }
+        .insight-list h4.visual-header { color: #6f42c1; }
+        .insight-list h4.suggestions-header { color: #17a2b8; }
+        .insight-item { padding: 10px 12px; border-left: 3px solid #dee2e6;
+                        margin-bottom: 8px; font-size: 13px; background: #fff;
+                        border-radius: 0 4px 4px 0; }
+        .insight-item.issue { border-left-color: #dc3545; }
+        .insight-item.suggestion { border-left-color: #17a2b8; }
+        .insight-item.visual { border-left-color: #6f42c1; }
+        .carrier-details { padding: 15px 20px; border-top: 1px solid #eee; }
+        .carrier-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .carrier-table th { text-align: left; padding: 8px 12px; background: #f8f9fa;
+                           border-bottom: 2px solid #dee2e6; color: #495057; }
+        .carrier-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+        .carrier-table tr:hover { background: #f8f9fa; }
+        .carrier-table .carrier-name-cell { font-weight: 600; color: #2c3e50; }
+        .carrier-table .number { text-align: right; font-family: monospace; }
+        .carrier-table .terms-cell { font-size: 12px; color: #666; max-width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Insurance Tower - Sample Tower BC</h1>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $200M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 90.0%; background: #3498db;"
+                     title="Chubb Bermuda - 90.0%">
+                    <span class="carrier-name">Chubb Bermuda</span>
+                    <span class="carrier-pct">90%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Chubb Bermuda</td>
+                            <td>$45M p/o $50M xs $150M</td>
+                            <td class="number">90.0%</td>
+                            <td class="number">$50,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">125% Margin; Excl. NWS, Flood, & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $150M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 50.0%; background: #3498db;"
+                     title="Homeland / Intact - 50.0%">
+                    <span class="carrier-name">Homeland / Intact</span>
+                    <span class="carrier-pct">50%</span>
+                </div>
+                <div class="carrier-block" style="width: 30.0%; background: #2ecc71;"
+                     title="Helix U.S. - 30.0%">
+                    <span class="carrier-name">Helix U.S.</span>
+                    <span class="carrier-pct">30%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e74c3c;"
+                     title="Ironshore - 10.0%">
+                    <span class="carrier-name">Ironshore</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #9b59b6;"
+                     title="Sompo - 10.0%">
+                    <span class="carrier-name">Sompo</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Homeland / Intact</td>
+                            <td>$25M p/o $50M xs $100M</td>
+                            <td class="number">50.0%</td>
+                            <td class="number">$50,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Helix U.S.</td>
+                            <td>$15M p/o $50M xs $100M</td>
+                            <td class="number">30.0%</td>
+                            <td class="number">$45,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Ironshore</td>
+                            <td>$5M p/o $50M xs $100M</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$12,500</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Sompo</td>
+                            <td>$5M p/o $50M xs $100M</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$10,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $100M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 50.0%; background: #3498db;"
+                     title="Lexington - 50.0%">
+                    <span class="carrier-name">Lexington</span>
+                    <span class="carrier-pct">50%</span>
+                </div>
+                <div class="carrier-block" style="width: 30.0%; background: #2ecc71;"
+                     title="Lloyd's (TKO) - 30.0%">
+                    <span class="carrier-name">Lloyd's (TKO)</span>
+                    <span class="carrier-pct">30%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Lexington</td>
+                            <td>$25M p/o $50M xs $50M</td>
+                            <td class="number">50.0%</td>
+                            <td class="number">$125,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's (TKO)</td>
+                            <td>$15M p/o $50M xs $50M</td>
+                            <td class="number">30.0%</td>
+                            <td class="number">$67,500</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $50M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 30.0%; background: #3498db;"
+                     title="Ironshore - 30.0%">
+                    <span class="carrier-name">Ironshore</span>
+                    <span class="carrier-pct">30%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Sompo - 20.0%">
+                    <span class="carrier-name">Sompo</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #e74c3c;"
+                     title="RSUI - 10.0%">
+                    <span class="carrier-name">RSUI</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Ironshore</td>
+                            <td>$7.5M p/o $25M xs $25M</td>
+                            <td class="number">30.0%</td>
+                            <td class="number">$105,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Sompo</td>
+                            <td>$5M p/o $25M xs $25M</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$95,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">RSUI</td>
+                            <td>$7.5M p/o $75M xs $25M</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$50,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $25M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 40.0%; background: #3498db;"
+                     title="Core Specialty - 40.0%">
+                    <span class="carrier-name">Core Specialty</span>
+                    <span class="carrier-pct">40%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Lloyd's (WRB) - 20.0%">
+                    <span class="carrier-name">Lloyd's (WRB)</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 17.0%; background: #e74c3c;"
+                     title="Risksmith - 17.0%">
+                    <span class="carrier-name">Risksmith</span>
+                    <span class="carrier-pct">17%</span>
+                </div>
+                <div class="carrier-block" style="width: 13.0%; background: #9b59b6;"
+                     title="Lloyd's (HAM) - 13.0%">
+                    <span class="carrier-name">Lloyd's (HAM)</span>
+                    <span class="carrier-pct">13%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Berkshire - 10.0%">
+                    <span class="carrier-name">Berkshire</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">Core Specialty</td>
+                            <td>$6M p/o $15M xs $10M</td>
+                            <td class="number">40.0%</td>
+                            <td class="number">$300,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's (WRB)</td>
+                            <td>$3M p/o $15M xs $10M</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$200,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Risksmith</td>
+                            <td>$2.55M p/o $15M xs $10M</td>
+                            <td class="number">17.0%</td>
+                            <td class="number">$161,500</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Excl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's (HAM)</td>
+                            <td>$1.95M p/o $15M xs $10M</td>
+                            <td class="number">13.0%</td>
+                            <td class="number">$104,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Berkshire</td>
+                            <td>$1.5M p/o $15M xs $10M</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$125,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="layer">
+            <div class="layer-header">Layer: $10M</div>
+            <div class="layer-bar">
+                <div class="carrier-block" style="width: 25.0%; background: #3498db;"
+                     title="RSUI - 25.0%">
+                    <span class="carrier-name">RSUI</span>
+                    <span class="carrier-pct">25%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #2ecc71;"
+                     title="Lloyd's (DUW) - 20.0%">
+                    <span class="carrier-name">Lloyd's (DUW)</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 20.0%; background: #e74c3c;"
+                     title="AWAC Bermuda - 20.0%">
+                    <span class="carrier-name">AWAC Bermuda</span>
+                    <span class="carrier-pct">20%</span>
+                </div>
+                <div class="carrier-block" style="width: 12.0%; background: #9b59b6;"
+                     title="GenStar - 12.0%">
+                    <span class="carrier-name">GenStar</span>
+                    <span class="carrier-pct">12%</span>
+                </div>
+                <div class="carrier-block" style="width: 10.0%; background: #f39c12;"
+                     title="Starr - 10.0%">
+                    <span class="carrier-name">Starr</span>
+                    <span class="carrier-pct">10%</span>
+                </div>
+                <div class="carrier-block" style="width: 8.0%; background: #1abc9c;"
+                     title="Lloyd's (IGO) - 8.0%">
+                    <span class="carrier-name">Lloyd's (IGO)</span>
+                    <span class="carrier-pct">8%</span>
+                </div>
+            </div>
+            <div class="carrier-details">
+                <table class="carrier-table">
+                    <thead>
+                        <tr>
+                            <th>Carrier</th>
+                            <th>Layer Description</th>
+                            <th>Participation %</th>
+                            <th>Premium</th>
+                            <th>% Premium</th>
+                            <th>Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="carrier-name-cell">RSUI</td>
+                            <td>$2.5M p/o $10M</td>
+                            <td class="number">25.0%</td>
+                            <td class="number">$850,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's (DUW)</td>
+                            <td>$5M p/o $25M</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$600,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">AWAC Bermuda</td>
+                            <td>$2M p/o $10M</td>
+                            <td class="number">20.0%</td>
+                            <td class="number">$700,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">GenStar</td>
+                            <td>$1.2M p/o $10M</td>
+                            <td class="number">12.0%</td>
+                            <td class="number">$390,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">110% Margin; Incl. Flood & EQ</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Starr</td>
+                            <td>$20M p/o $200M</td>
+                            <td class="number">10.0%</td>
+                            <td class="number">$400,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ ($25M)</td>
+                        </tr>
+                        <tr>
+                            <td class="carrier-name-cell">Lloyd's (IGO)</td>
+                            <td>$800K p/o $10M</td>
+                            <td class="number">8.0%</td>
+                            <td class="number">$256,000</td>
+                            <td class="number">—</td>
+                            <td class="terms-cell">Blanket; Incl. Flood & EQ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="json-section">
+            <div class="json-header">Raw JSON Data</div>
+            <pre>[
+  {
+    "layer_limit": "$200M",
+    "layer_description": "$45M p/o $50M xs $150M",
+    "carrier": "Chubb Bermuda",
+    "participation_pct": 0.9,
+    "premium": 50000.0,
+    "premium_share": null,
+    "terms": "125% Margin; Excl. NWS, Flood, & EQ",
+    "policy_number": null,
+    "excel_range": "D3",
+    "col_span": 9,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$150M"
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "$25M p/o $50M xs $100M",
+    "carrier": "Homeland / Intact",
+    "participation_pct": 0.5,
+    "premium": 50000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "D11",
+    "col_span": 5,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$100M"
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "$5M p/o $50M xs $100M",
+    "carrier": "Ironshore",
+    "participation_pct": 0.1,
+    "premium": 12500.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "I11",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$100M"
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "$15M p/o $50M xs $100M",
+    "carrier": "Helix U.S.",
+    "participation_pct": 0.3,
+    "premium": 45000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "J11",
+    "col_span": 3,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$100M"
+  },
+  {
+    "layer_limit": "$150M",
+    "layer_description": "$5M p/o $50M xs $100M",
+    "carrier": "Sompo",
+    "participation_pct": 0.1,
+    "premium": 10000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "P11",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$100M"
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "$15M p/o $50M xs $50M",
+    "carrier": "Lloyd's (TKO)",
+    "participation_pct": 0.3,
+    "premium": 67500.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "D19",
+    "col_span": 3,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$50M"
+  },
+  {
+    "layer_limit": "$100M",
+    "layer_description": "$25M p/o $50M xs $50M",
+    "carrier": "Lexington",
+    "participation_pct": 0.5,
+    "premium": 125000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "H19",
+    "col_span": 5,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$50M"
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "$7.5M p/o $25M xs $25M",
+    "carrier": "Ironshore",
+    "participation_pct": 0.3,
+    "premium": 105000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "D27",
+    "col_span": 3,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$25M"
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "$7.5M p/o $75M xs $25M",
+    "carrier": "RSUI",
+    "participation_pct": 0.1,
+    "premium": 50000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "G27",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$25M"
+  },
+  {
+    "layer_limit": "$50M",
+    "layer_description": "$5M p/o $25M xs $25M",
+    "carrier": "Sompo",
+    "participation_pct": 0.2,
+    "premium": 95000.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "H27",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$25M"
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "$6M p/o $15M xs $10M",
+    "carrier": "Core Specialty",
+    "participation_pct": 0.4,
+    "premium": 300000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "F35",
+    "col_span": 4,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$10M"
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "$1.95M p/o $15M xs $10M",
+    "carrier": "Lloyd's (HAM)",
+    "participation_pct": 0.13,
+    "premium": 104000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "J35",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$10M"
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "$2.55M p/o $15M xs $10M",
+    "carrier": "Risksmith",
+    "participation_pct": 0.17,
+    "premium": 161500.0,
+    "premium_share": null,
+    "terms": "Blanket; Excl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "K35",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$10M"
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "$3M p/o $15M xs $10M",
+    "carrier": "Lloyd's (WRB)",
+    "participation_pct": 0.2,
+    "premium": 200000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "P35",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$10M"
+  },
+  {
+    "layer_limit": "$25M",
+    "layer_description": "$1.5M p/o $15M xs $10M",
+    "carrier": "Berkshire",
+    "participation_pct": 0.1,
+    "premium": 125000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "Q35",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": "$10M"
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$20M p/o $200M",
+    "carrier": "Starr",
+    "participation_pct": 0.1,
+    "premium": 400000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ ($25M)",
+    "policy_number": null,
+    "excel_range": "C43",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$5M p/o $25M",
+    "carrier": "Lloyd's (DUW)",
+    "participation_pct": 0.2,
+    "premium": 600000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "D43",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$800K p/o $10M",
+    "carrier": "Lloyd's (IGO)",
+    "participation_pct": 0.08,
+    "premium": 256000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "F43",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$1.2M p/o $10M",
+    "carrier": "GenStar",
+    "participation_pct": 0.12,
+    "premium": 390000.0,
+    "premium_share": null,
+    "terms": "110% Margin; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "G43",
+    "col_span": 1,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$2.5M p/o $10M",
+    "carrier": "RSUI",
+    "participation_pct": 0.25,
+    "premium": 850000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "H43",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  },
+  {
+    "layer_limit": "$10M",
+    "layer_description": "$2M p/o $10M",
+    "carrier": "AWAC Bermuda",
+    "participation_pct": 0.2,
+    "premium": 700000.0,
+    "premium_share": null,
+    "terms": "Blanket; Incl. Flood & EQ",
+    "policy_number": null,
+    "excel_range": "J43",
+    "col_span": 2,
+    "row_span": 1,
+    "fill_color": null,
+    "attachment_point": null
+  }
+]</pre>
+        </div>
+    </div>
+</body>
+</html>

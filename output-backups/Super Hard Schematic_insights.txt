@@ -1,0 +1,31 @@
+Verification Insights: Super Hard Schematic.xlsx
+============================================================
+
+Score: 90%
+Summary: The extraction is largely accurate, with most carrier, participation, and premium data correctly identified and mapped to their respective layers. A few minor discrepancies were noted, primarily related to the interpretation of 'N/A' values and some missing descriptions. (44 false positives filtered)
+
+ISSUES FOUND:
+----------------------------------------
+1. Layer $800M: 'TIV Caps' [cell:N47] has a participation of 0.25 and a premium of 75000.0. The Excel data shows 'TIV Caps' in N47, but the participation is not explicitly stated in the same row. The premium of 75000.0 is found in N53, which is under the 'Share Premium' row for column N, and seems to correspond to the 'Scottsdale' entry in N51.
+2. Layer $405M: 'New Market' [cell:H99] has participation and premium listed as 'N/A'. The Excel data shows 'New Market' in H99, but the participation and premium are not directly in this row. The participation is in H103 (0.43) and premium in H106 (0.0).
+3. Layer $405M: 'Maxum' [cell:H101] has participation as 'N/A' and premium as 130805.0. The Excel data shows 'Maxum' in H101. The participation is not directly in this row. The premium of 130805.0 is in E106, which is under 'Layer Premium' for column E, and seems to correspond to 'Arrowhead/Incumbent' in E100.
+4. Layer $25M: 'CV Starr' [cell:M183] has participation and premium listed as 'N/A'. The Excel data shows 'CV Starr' in M183. The participation and premium are not explicitly stated in this row.
+5. Layer $25M: 'Lloyds of London' [cell:N183] has participation and premium listed as 'N/A'. The Excel data shows 'Lloyds of London' in N183. The participation and premium are not explicitly stated in this row.
+6. Layer $25M: 'AWAC' [cell:O183] has participation and premium listed as 'N/A'. The Excel data shows 'AWAC' in O183. The participation and premium are not explicitly stated in this row.
+7. Layer $25M: 'Endurance' [cell:P183] has participation and premium listed as 'N/A'. The Excel data shows 'Endurance' in P183. The participation and premium are not explicitly stated in this row.
+8. Layer $10M: 'RSUI' [cell:J186] has participation of 0.05 and premium as 'N/A'. The description '$5M xs $5M' is correctly associated. The participation of 0.05 is in J190, which is correctly mapped. The premium is not explicitly stated in the row for 'RSUI' but is found in J192 as '2,000,000'.
+9. Layer $10M: 'Colony/Incumbent' [cell:K186] has participation of 0.12 and premium as 'N/A'. The description '$5M xs $5M' is correctly associated. The participation of 0.12 is in K190, which is correctly mapped. The premium is not explicitly stated in the row for 'Colony/Incumbent' but is found in K192 as '1,726,625'.
+10. Layer $10M: 'Markel' [cell:H192] has participation and premium listed as 'N/A'. The Excel data shows 'Markel' in H192. The participation and premium are not explicitly stated in this row.
+11. Layer $5M: 'Increae in values over (Marketing)' [cell:D206] has participation and premium listed as 'N/A'. The Excel data shows 'Increae in values over (Marketing)' in D206. The participation and premium are not explicitly stated in this row.
+12. Layer $5M: 'Increae in values (Marketing)' [cell:D209] has participation and premium listed as 'N/A'. The Excel data shows 'Increae in values (Marketing)' in D209. The participation and premium are not explicitly stated in this row.
+13. Layer $10M: No carrier premiums extracted but summary shows $7,810,600 (cell S192) - possible extraction gap
+
+SUGGESTIONS:
+----------------------------------------
+1. Ensure that 'N/A' values for participation and premium are consistently handled, either by explicitly marking them as null or by providing a default value if appropriate.
+2. Clarify the meaning of entries like 'TIV Caps' and 'Target' when they appear as carriers, as they might represent data points rather than actual insurance carriers.
+3. Review the logic for associating descriptions (e.g., '$100,000,000 xs $505,000,000') to ensure they are correctly linked to the relevant carrier and layer, especially when the description spans multiple rows or columns.
+4. Review 1 layer(s) with significant carrier/summary differences (note: summary columns may show prior year data)
+
+============================================================
+Raw Response Length: 33339 chars

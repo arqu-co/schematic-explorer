@@ -223,6 +223,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
   const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
   const [colWidths, setColWidths] = useState<Map<number, number>>(new Map());
   const [resizingCol, setResizingCol] = useState<number | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
@@ -242,6 +243,7 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
         setHiddenCols(new Set());
         setHiddenRows(new Set());
         setColWidths(new Map());
+        setSelectedCell(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Excel');
       } finally {
@@ -378,6 +380,21 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     );
   };
 
+  // Row/column selection highlighting when a cell is clicked
+  const isSelectedRow = (rowIdx: number) => selectedCell?.row === rowIdx;
+  const isSelectedCol = (colIdx: number) => selectedCell?.col === colIdx;
+  const isSelectedCell = (rowIdx: number, colIdx: number) =>
+    selectedCell?.row === rowIdx && selectedCell?.col === colIdx;
+
+  const handleCellClick = (rowIdx: number, colIdx: number) => {
+    // Toggle off if clicking the same cell, otherwise select it
+    if (selectedCell?.row === rowIdx && selectedCell?.col === colIdx) {
+      setSelectedCell(null);
+    } else {
+      setSelectedCell({ row: rowIdx, col: colIdx });
+    }
+  };
+
   return (
     <Box className="excel-viewer">
       <Flex gap="2" mb="2" align="center" className="excel-toolbar">
@@ -410,10 +427,11 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
               {Array.from({ length: numCols }, (_, c) => {
                 if (hiddenCols.has(c)) return null;
                 const width = colWidths.get(c);
+                const colSelected = isSelectedCol(c);
                 return (
                   <th
                     key={c}
-                    className="excel-col-header"
+                    className={`excel-col-header${colSelected ? ' col-selected' : ''}`}
                     style={width ? { width, minWidth: width } : undefined}
                   >
                     <Flex align="center" justify="between" gap="1">
@@ -438,20 +456,33 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
           <tbody>
             {grid.map((row, rowIdx) => {
               if (hiddenRows.has(rowIdx)) return null;
+              const rowSelected = isSelectedRow(rowIdx);
               return (
                 <tr key={rowIdx}>
-                  <th className="excel-row-header">{rowIdx + 1}</th>
+                  <th className={`excel-row-header${rowSelected ? ' row-selected' : ''}`}>
+                    {rowIdx + 1}
+                  </th>
                   {row.map((cell, colIdx) => {
                     if (hiddenCols.has(colIdx)) return null;
                     const width = colWidths.get(colIdx);
                     const highlighted = isHighlighted(rowIdx, colIdx);
+                    const inSelectedRow = rowSelected;
+                    const inSelectedCol = isSelectedCol(colIdx);
+                    const isCellSelected = isSelectedCell(rowIdx, colIdx);
                     return (
                       <td
                         key={colIdx}
                         data-row={rowIdx}
                         data-col={colIdx}
-                        className={`${cell.isMerged ? 'merged-cell' : ''} ${highlighted ? 'cell-highlight' : ''}`}
-                        style={width ? { width, minWidth: width } : undefined}
+                        onClick={() => handleCellClick(rowIdx, colIdx)}
+                        className={[
+                          cell.isMerged ? 'merged-cell' : '',
+                          highlighted ? 'cell-highlight' : '',
+                          isCellSelected ? 'cell-selected' : '',
+                          inSelectedRow && !isCellSelected ? 'row-highlight' : '',
+                          inSelectedCol && !isCellSelected ? 'col-highlight' : '',
+                        ].filter(Boolean).join(' ')}
+                        style={{ ...(width ? { width, minWidth: width } : {}), cursor: 'pointer' }}
                       >
                         {cell.value}
                       </td>
