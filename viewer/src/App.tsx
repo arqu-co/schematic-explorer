@@ -5,7 +5,8 @@ import * as XLSX from 'xlsx';
 import '@radix-ui/themes/styles.css';
 import type { CarrierEntry, SchematicFile, Layer } from './types';
 import { formatCurrency, formatPercent, hexToRgba, groupByLayer, parseRange } from './utils';
-import { API_PATHS, getDataUrl, getInsightsUrl, getInputExcelUrl } from './api';
+import { getInputExcelUrl } from './api';
+import { useFiles, useTheme } from './hooks';
 import './App.css';
 
 function TowerVisualization({ layers, onCellClick }: { layers: Layer[]; onCellClick?: (entry: CarrierEntry) => void }) {
@@ -244,26 +245,10 @@ function SchematicCard({ file, onSelect, isSelected }: { file: SchematicFile; on
 }
 
 function App() {
-  const [files, setFiles] = useState<SchematicFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<SchematicFile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { files, selectedFile, loading, error, selectFile } = useFiles();
+  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('tower');
   const [highlightEntry, setHighlightEntry] = useState<CarrierEntry | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme');
-      if (saved === 'light' || saved === 'dark') return saved;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'dark';
-  });
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-  };
 
   const handleCellClick = (entry: CarrierEntry) => {
     setHighlightEntry(entry);
@@ -271,43 +256,10 @@ function App() {
   };
 
   const handleFileSelect = (file: SchematicFile) => {
-    setSelectedFile(file);
+    selectFile(file);
     setHighlightEntry(null);
     setActiveTab('tower');
   };
-
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const indexRes = await fetch(API_PATHS.FILES);
-        if (!indexRes.ok) throw new Error('Failed to load file index');
-        const fileList: string[] = await indexRes.json();
-
-        const loaded: SchematicFile[] = await Promise.all(
-          fileList.map(async (name) => {
-            const stem = name.replace('.json', '');
-            const [jsonRes, insightsRes] = await Promise.all([
-              fetch(getDataUrl(name)),
-              fetch(getInsightsUrl(stem)).catch(() => null)
-            ]);
-
-            const entries: CarrierEntry[] = jsonRes.ok ? await jsonRes.json() : [];
-            const insights = insightsRes?.ok ? await insightsRes.text() : null;
-
-            return { name, stem, entries, insights };
-          })
-        );
-
-        setFiles(loaded.filter(f => f.entries.length > 0));
-        if (loaded.length > 0) setSelectedFile(loaded[0]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
 
   if (loading) {
     return (
