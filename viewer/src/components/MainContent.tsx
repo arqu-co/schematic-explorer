@@ -6,7 +6,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Box, Tabs, Flex, Text, Badge, Table, Code } from '@radix-ui/themes';
 import * as XLSX from 'xlsx';
 import type { CarrierEntry, Layer } from '../types';
-import { formatCurrency, formatPercent, hexToRgba, numToCol, parseRange, sanitizeHtml } from '../utils';
+import { formatCurrency, formatPercent, hexToRgba, numToCol, parseRange } from '../utils';
 import { getInputExcelUrl } from '../api';
 
 // =============================================================================
@@ -158,11 +158,68 @@ interface ExcelViewerProps {
   highlightRange?: string | null;
 }
 
+/**
+ * Build a grid of cells from an Excel sheet, expanding merged cells.
+ * Returns a 2D array where each element is { value, isMerged, isOrigin }.
+ */
+function buildCellGrid(sheet: XLSX.WorkSheet): { value: string; isMerged: boolean; isOrigin: boolean }[][] {
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+  const numRows = range.e.r - range.s.r + 1;
+  const numCols = range.e.c - range.s.c + 1;
+
+  // Initialize grid with empty cells
+  const grid: { value: string; isMerged: boolean; isOrigin: boolean }[][] = [];
+  for (let r = 0; r < numRows; r++) {
+    grid[r] = [];
+    for (let c = 0; c < numCols; c++) {
+      grid[r][c] = { value: '', isMerged: false, isOrigin: false };
+    }
+  }
+
+  // Build merged cell lookup
+  const mergedRanges = sheet['!merges'] || [];
+  const mergedCells = new Map<string, { startRow: number; startCol: number }>();
+  for (const merge of mergedRanges) {
+    for (let r = merge.s.r; r <= merge.e.r; r++) {
+      for (let c = merge.s.c; c <= merge.e.c; c++) {
+        const key = `${r},${c}`;
+        mergedCells.set(key, { startRow: merge.s.r, startCol: merge.s.c });
+      }
+    }
+  }
+
+  // Fill grid with cell values
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      const cellAddr = XLSX.utils.encode_cell({ r: r + range.s.r, c: c + range.s.c });
+      const cell = sheet[cellAddr];
+      const mergeInfo = mergedCells.get(`${r + range.s.r},${c + range.s.c}`);
+
+      if (mergeInfo) {
+        const isOrigin = mergeInfo.startRow === r + range.s.r && mergeInfo.startCol === c + range.s.c;
+        grid[r][c] = {
+          value: isOrigin && cell ? String(cell.v ?? '') : '',
+          isMerged: !isOrigin,
+          isOrigin,
+        };
+      } else {
+        grid[r][c] = {
+          value: cell ? String(cell.v ?? '') : '',
+          isMerged: false,
+          isOrigin: false,
+        };
+      }
+    }
+  }
+
+  return grid;
+}
+
 function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
-  const [html, setHtml] = useState<string>('');
+  const [grid, setGrid] = useState<{ value: string; isMerged: boolean; isOrigin: boolean }[][] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
 
   useEffect(() => {
     async function loadExcel() {
@@ -174,8 +231,8 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
         const arrayBuffer = await response.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const htmlOutput = XLSX.utils.sheet_to_html(firstSheet, { editable: false, id: 'excel-table' });
-        setHtml(htmlOutput);
+        const cellGrid = buildCellGrid(firstSheet);
+        setGrid(cellGrid);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load Excel');
       } finally {
@@ -185,73 +242,26 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     loadExcel();
   }, [stem]);
 
-  // Add row numbers and column headers after HTML is rendered
+  // Highlight effect
   useEffect(() => {
-    if (!containerRef.current || !html) return;
-
-    const table = containerRef.current.querySelector('table');
-    if (!table) return;
-
-    const rows = table.querySelectorAll('tr');
-    if (rows.length === 0) return;
-
-    // Determine number of columns from first row
-    const numCols = rows[0]?.children.length || 0;
-
-    // Add column header row at the top
-    const headerRow = document.createElement('tr');
-    headerRow.className = 'excel-header-row';
-    // Empty corner cell
-    const cornerCell = document.createElement('th');
-    cornerCell.className = 'excel-corner-cell';
-    headerRow.appendChild(cornerCell);
-    // Column letters (A, B, C, ...)
-    for (let c = 0; c < numCols; c++) {
-      const th = document.createElement('th');
-      th.className = 'excel-col-header';
-      th.textContent = numToCol(c + 1);
-      headerRow.appendChild(th);
-    }
-    table.insertBefore(headerRow, rows[0]);
-
-    // Add row numbers to each existing row
-    rows.forEach((row, idx) => {
-      const rowNumCell = document.createElement('th');
-      rowNumCell.className = 'excel-row-header';
-      rowNumCell.textContent = String(idx + 1);
-      row.insertBefore(rowNumCell, row.firstChild);
-    });
-  }, [html]);
-
-  useEffect(() => {
-    if (!containerRef.current || !highlightRange) return;
+    if (!tableRef.current || !highlightRange || !grid) return;
 
     // Clear previous highlights
-    containerRef.current.querySelectorAll('.cell-highlight').forEach((el) => {
+    tableRef.current.querySelectorAll('.cell-highlight').forEach((el) => {
       el.classList.remove('cell-highlight');
     });
 
     const parsed = parseRange(highlightRange);
     if (!parsed) return;
 
-    const table = containerRef.current.querySelector('table');
-    if (!table) return;
-
-    const rows = table.querySelectorAll('tr');
-
-    // Use the parsed range directly - it now contains accurate bounds from extraction
-    // Add 1 to account for the header row/column we inserted
     const { startCol, startRow, endCol, endRow } = parsed;
 
-    // Highlight the rectangular region
-    // +1 to row index because we added a header row at the top
-    // +1 to col index because we added a row number column on the left
+    // Find and highlight cells (accounting for header row/col with +1)
     let firstHighlighted: Element | null = null;
-    for (let r = startRow + 1; r <= endRow + 1; r++) {
-      const row = rows[r];
-      if (!row) continue;
-      for (let c = startCol + 1; c <= endCol + 1; c++) {
-        const cell = row.children[c] as HTMLElement;
+    for (let r = startRow; r <= endRow; r++) {
+      for (let c = startCol; c <= endCol; c++) {
+        // +1 for header row, +1 for row number column
+        const cell = tableRef.current.querySelector(`tr:nth-child(${r + 2}) td:nth-child(${c + 2})`) as HTMLElement;
         if (cell) {
           cell.classList.add('cell-highlight');
           if (!firstHighlighted) firstHighlighted = cell;
@@ -262,12 +272,40 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
     if (firstHighlighted) {
       firstHighlighted.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
     }
-  }, [highlightRange, html]);
+  }, [highlightRange, grid]);
 
   if (loading) return <Text color="gray">Loading spreadsheet...</Text>;
   if (error) return <Text color="red">{error}</Text>;
+  if (!grid || grid.length === 0) return <Text color="gray">No data</Text>;
 
-  return <Box ref={containerRef} className="excel-viewer" dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
+  const numCols = grid[0]?.length || 0;
+
+  return (
+    <Box className="excel-viewer">
+      <table ref={tableRef} id="excel-table">
+        <thead>
+          <tr className="excel-header-row">
+            <th className="excel-corner-cell"></th>
+            {Array.from({ length: numCols }, (_, c) => (
+              <th key={c} className="excel-col-header">{numToCol(c + 1)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {grid.map((row, rowIdx) => (
+            <tr key={rowIdx}>
+              <th className="excel-row-header">{rowIdx + 1}</th>
+              {row.map((cell, colIdx) => (
+                <td key={colIdx} className={cell.isMerged ? 'merged-cell' : ''}>
+                  {cell.value}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Box>
+  );
 }
 
 // =============================================================================
