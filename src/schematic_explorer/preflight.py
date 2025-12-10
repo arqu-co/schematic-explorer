@@ -14,7 +14,8 @@ Example:
 
 from dataclasses import dataclass
 
-from .extractor import _classify_blocks, _find_all_blocks, _identify_layers, _load_workbook
+from .blocks import classify_blocks
+from .extractor import _find_all_blocks, _identify_layers, _load_workbook
 
 
 @dataclass
@@ -84,7 +85,7 @@ def preflight(filepath: str, sheet_name: str | None = None) -> PreflightResult:
 
     # Find and classify all blocks
     blocks = _find_all_blocks(ws)
-    _classify_blocks(blocks)
+    classify_blocks(blocks)
 
     # Identify layers
     layers = _identify_layers(blocks, ws)

@@ -1,4 +1,4 @@
-"""Tests for schematic_explorer.extractor module."""
+"""Tests for schematic_explorer module."""
 
 import tempfile
 from pathlib import Path
@@ -6,26 +6,36 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
+# Import from extractor
 from schematic_explorer.extractor import (
-    Block,
-    _classify_blocks,
     _classify_column_header,
     _classify_row_label,
-    _detect_summary_columns,
     _find_all_blocks,
     _format_limit,
     _identify_layers,
-    _infer_type,
+    _split_multiline_carrier,
+    extract_schematic,
+    extract_schematic_with_summaries,
+)
+
+# Import from blocks
+from schematic_explorer.blocks import Block, _infer_type, classify_blocks
+
+# Import from carriers
+from schematic_explorer.carriers import (
     _is_known_carrier,
     _is_non_carrier,
     _load_carriers,
     _looks_like_policy_number,
     _normalize_for_match,
+    _KNOWN_CARRIERS,
+)
+
+# Import from proximity
+from schematic_explorer.proximity import (
     _normalize_percentage,
     _parse_currency,
-    _split_multiline_carrier,
-    extract_schematic,
-    extract_schematic_with_summaries,
+    detect_summary_columns,
 )
 
 
@@ -91,7 +101,7 @@ class TestLoadCarriers:
         """Test that carriers are loaded from YAML."""
         _load_carriers()
         # Should have some known carriers loaded
-        from schematic_explorer.extractor import _KNOWN_CARRIERS
+        from schematic_explorer.carriers import _KNOWN_CARRIERS
 
         assert len(_KNOWN_CARRIERS) > 0
 
@@ -343,14 +353,14 @@ class TestFindAllBlocks:
 
 
 class TestClassifyBlocks:
-    """Tests for _classify_blocks function."""
+    """Tests for classify_blocks function."""
 
     def test_classify_single_block(self, workbook):
         """Test classifying a single block."""
         wb, ws = workbook
         ws["A1"] = "Chubb Insurance"
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         assert blocks[0].field_type == "carrier"
         assert blocks[0].confidence > 0
 
@@ -361,7 +371,7 @@ class TestClassifyBlocks:
         ws["B1"] = 0.25
         ws["C1"] = "Test Insurance"
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
 
         types = {b.value: b.field_type for b in blocks}
         assert types["$50M"] == "limit"
@@ -376,7 +386,7 @@ class TestIdentifyLayers:
         wb, ws = workbook
         ws["A1"] = "$50M"
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
         assert layers[0]["limit"] == "$50M"
@@ -388,7 +398,7 @@ class TestIdentifyLayers:
         ws["A5"] = "$50M"
         ws["A10"] = "$100M"
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 3
 
@@ -398,7 +408,7 @@ class TestIdentifyLayers:
         ws["A1"] = "$25M"
         ws["A5"] = "$50M"
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
 
         assert layers[0]["start_row"] == 1
@@ -407,21 +417,21 @@ class TestIdentifyLayers:
 
 
 class TestDetectSummaryColumns:
-    """Tests for _detect_summary_columns function."""
+    """Tests for detect_summary_columns function."""
 
     def test_no_summary_columns(self, workbook):
         """Test worksheet with no summary columns."""
         wb, ws = workbook
         ws["A1"] = "Carrier"
         ws["B1"] = "Premium"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert len(result["columns"]) == 0
 
     def test_detect_bound_premium_column(self, workbook):
         """Test detecting Layer Bound Premium column."""
         wb, ws = workbook
         ws["Z1"] = "Layer Bound Premium"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 26 in result["columns"]  # Column Z = 26
         assert result["bound_premium_col"] == 26
 
@@ -429,14 +439,14 @@ class TestDetectSummaryColumns:
         """Test detecting Layer Rate column."""
         wb, ws = workbook
         ws["Y1"] = "Layer Rate"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 25 in result["columns"]
 
     def test_detect_year_layer_premium(self, workbook):
         """Test detecting year-prefixed layer premium columns."""
         wb, ws = workbook
         ws["X1"] = "2019 Layer Premium"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 24 in result["columns"]
 
 
@@ -850,14 +860,14 @@ class TestClassifyRowLabelAdditional:
 
 
 class TestDetectSummaryColumnsAdditional:
-    """Additional tests for _detect_summary_columns function."""
+    """Additional tests for detect_summary_columns function."""
 
     def test_detect_annualized_column(self):
         """Test detecting annualized column."""
         wb = Workbook()
         ws = wb.active
         ws["X1"] = "Annualized Premium"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 24 in result["columns"]
 
     def test_detect_total_premium_column(self):
@@ -865,7 +875,7 @@ class TestDetectSummaryColumnsAdditional:
         wb = Workbook()
         ws = wb.active
         ws["W1"] = "Total Premium"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 23 in result["columns"]
 
     def test_detect_layer_target_column(self):
@@ -873,7 +883,7 @@ class TestDetectSummaryColumnsAdditional:
         wb = Workbook()
         ws = wb.active
         ws["V1"] = "Layer Target"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 22 in result["columns"]
         assert result["layer_target_col"] == 22
 
@@ -885,7 +895,7 @@ class TestDetectSummaryColumnsAdditional:
         ws["V1"] = "Fees"
         ws["W1"] = "Taxes"
         ws["X1"] = "Total"
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 21 in result["columns"]  # U
         assert 22 in result["columns"]  # V (Fees)
         assert 23 in result["columns"]  # W (Taxes)
@@ -902,7 +912,7 @@ class TestIdentifyLayersAdditional:
         ws["A1"] = "$50M"
         ws["A5"] = 2_000_000_000  # $2B should be filtered
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1  # Only the $50M layer
 
@@ -913,7 +923,7 @@ class TestIdentifyLayersAdditional:
         ws["A1"] = "$50M"
         ws["C1"] = "$100M"  # Should be ignored (column C)
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
         assert layers[0]["limit"] == "$50M"
@@ -926,7 +936,7 @@ class TestIdentifyLayersAdditional:
         ws["A3"] = "Premium"
         ws["B3"] = 50_000_000  # Large number but in Premium row
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
 
@@ -1034,7 +1044,7 @@ class TestYearLayerRateColumn:
         ws["U1"] = "2019 Layer Premium"
         ws["V1"] = "2019 Layer Rate"
 
-        result = _detect_summary_columns(ws)
+        result = detect_summary_columns(ws)
         assert 21 in result["columns"]  # U
         assert 22 in result["columns"]  # V
 
@@ -1052,7 +1062,7 @@ class TestIdentifyLayersYearPattern:
         ws["B3"] = 50_000_000  # Large number but in year-prefixed row
 
         blocks = _find_all_blocks(ws)
-        _classify_blocks(blocks)
+        classify_blocks(blocks)
         layers = _identify_layers(blocks, ws)
         assert len(layers) == 1
 

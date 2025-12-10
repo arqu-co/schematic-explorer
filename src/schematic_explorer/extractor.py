@@ -8,13 +8,20 @@ This extractor analyzes the spreadsheet structure from first principles:
 """
 
 import re
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-import yaml
 from openpyxl.utils import get_column_letter, range_boundaries
 
+from .blocks import Block, BILLION, classify_blocks
+from .carriers import _is_non_carrier, _looks_like_policy_number
+from .proximity import (
+    calculate_block_proximity,
+    detect_summary_columns,
+    get_column_range,
+    is_block_relevant,
+    match_currency_block,
+    match_participation_block,
+)
 from .types import CarrierEntry, LayerSummary, parse_excess_notation, parse_limit_value
 from .utils import build_merged_cell_map, get_cell_color, get_cell_value
 
@@ -22,257 +29,17 @@ from .utils import build_merged_cell_map, get_cell_color, get_cell_value
 # Constants
 # =============================================================================
 
-# Numeric thresholds for type inference
-MILLION = 1_000_000
-THOUSAND = 1_000
-BILLION = 1_000_000_000
-
-# Percentage thresholds
-PERCENTAGE_WHOLE_NUMBER_THRESHOLD = 1  # Values > 1 are assumed to be whole number %
-PERCENTAGE_MAX_WHOLE_NUMBER = 100  # Maximum value for whole number percentage
-
 # Proximity thresholds for spatial matching
-MAX_COLUMN_DISTANCE = 3  # Maximum columns away for non-aligned data matching
 MAX_ROW_SEARCH_DISTANCE = 10  # How many rows below carrier to search for data
 LAYER_ROW_PROXIMITY = 2  # Distance threshold for "nearby" layer rows
 
 # Column limits
 MAX_LAYER_LIMIT_COLUMN = 2  # Layer limits should be in columns A or B
 MAX_HEADER_SCAN_ROW = 10  # How many rows to scan for headers
-MAX_HEADER_SCAN_COLUMN = 30  # How many columns to scan for headers
-
-# Policy number constraints
-MAX_POLICY_NUMBER_LENGTH = 30
-MIN_POLICY_NUMBER_DIGITS = 4
-MIN_PURE_NUMERIC_POLICY_LENGTH = 6
-
-# Carrier name constraints
-MIN_CARRIER_NAME_LENGTH = 3
-MAX_CARRIER_NAME_LENGTH = 100
-
-# Patterns that indicate non-carrier text (descriptive/conditional text)
-NON_CARRIER_PHRASES = [
-    "subject to",
-    "conditions",
-    "terms &",
-    "all terms",
-    "tied to",
-    "offer capacity",
-    "no rp for",
-    "loss rating",
-    "increase in",
-    "decrease in",
-    "updated",
-    "by year",
-    "buy down",
-    "all risk",
-    "dic premium",
-    "aggregate",
-]
-
-# Patterns that indicate summary columns (not per-carrier data)
-SUMMARY_COLUMN_PATTERNS = [
-    "annualized",
-    "layer rate",  # "Layer Rates" but not "Layer Premium"
-    "bound premium",
-    "layer target",
-    "total premium",
-    "aggregate",
-]
-
-# Coverage/terms indicators
-COVERAGE_PATTERNS = [
-    "excl",
-    "incl",
-    "flood",
-    "earthquake",
-    "eq ",
-    "wind",
-    "terror",
-    "blanket",
-    "margin",
-    "ded",
-    "retention",
-    "all risk",
-    "dic",
-    "aop",
-    "named storm",
-    "nws",
-]
-
-# Column header label patterns
-LABEL_PATTERNS = [
-    "carrier",
-    "participation",
-    "premium",
-    "share",
-    "layer",
-    "limit",
-    "policy",
-    "terms",
-    "coverage",
-    "deductible",
-    "total",
-]
-
-# Company name suffixes that indicate a carrier
-COMPANY_SUFFIXES = [
-    "inc",
-    "llc",
-    "ltd",
-    "co",
-    "corp",
-    "company",
-    "ins",
-    "insurance",
-    "assurance",
-    "specialty",
-    "group",
-    "re",
-]
-
-# Status indicator values
-STATUS_VALUES = ("tbd", "n/a", "pending", "incumbent", "new", "renewal")
 
 # =============================================================================
-# Carrier Data (loaded from YAML)
+# Main Entry Point
 # =============================================================================
-
-# Load carrier lists from YAML
-_CARRIERS_FILE = Path(__file__).parent / "carriers.yml"
-_KNOWN_CARRIERS: set[str] = set()
-_NON_CARRIERS: set[str] = set()
-
-
-def _normalize_for_match(s: str) -> str:
-    """Normalize string for fuzzy matching - lowercase, strip punctuation."""
-    return re.sub(r"[^a-z0-9\s]", "", s.lower()).strip()
-
-
-def _load_carriers() -> None:
-    """Load carrier lists from YAML file."""
-    global _KNOWN_CARRIERS, _NON_CARRIERS
-    if _KNOWN_CARRIERS:  # Already loaded
-        return
-
-    if _CARRIERS_FILE.exists():
-        with open(_CARRIERS_FILE) as f:
-            data = yaml.safe_load(f)
-        _KNOWN_CARRIERS = {_normalize_for_match(c) for c in data.get("carriers", [])}
-        _NON_CARRIERS = {_normalize_for_match(c) for c in data.get("non_carriers", [])}
-
-
-def _is_known_carrier(value: str) -> bool:
-    """Check if value matches a known carrier (fuzzy match)."""
-    _load_carriers()
-    normalized = _normalize_for_match(value)
-
-    # Direct match
-    if normalized in _KNOWN_CARRIERS:
-        return True
-
-    # Check if any known carrier is contained in the value
-    # e.g., "Chubb Bermuda" contains "chubb"
-    for carrier in _KNOWN_CARRIERS:
-        if carrier in normalized or normalized in carrier:
-            return True
-
-    # Check for Lloyd's patterns - very common in insurance
-    if "lloyd" in normalized or "lloyds" in normalized:
-        return True
-
-    # Check for "London" with percentages - typically indicates London market carrier
-    if "london" in normalized and "%" in value:
-        return True
-
-    return False
-
-
-def _is_non_carrier(value: str) -> bool:
-    """Check if value matches a known non-carrier term."""
-    _load_carriers()
-    normalized = _normalize_for_match(value)
-
-    # Direct match only - don't do substring matching on non-carrier terms
-    # This prevents "Chubb Bermuda" from matching "Bermuda"
-    # and "London - Fidelis" from matching "London"
-    if normalized in _NON_CARRIERS:
-        return True
-
-    # For compound non-carrier terms (like "RT Layer"), check if value starts with them
-    # But ONLY for multi-word non-carrier terms to avoid blocking "London - Fidelis"
-    for term in _NON_CARRIERS:
-        # Only do prefix matching for multi-word terms
-        if " " in term and normalized.startswith(term + " "):
-            return True
-
-    # Additional patterns that indicate non-carrier text
-    val_lower = value.lower()
-
-    # Sentences or descriptive text (contains multiple words with common patterns)
-    if any(phrase in val_lower for phrase in NON_CARRIER_PHRASES):
-        return True
-
-    # Starts with symbols or contains mostly special characters
-    if value.startswith("*") or value.startswith("#"):
-        return True
-
-    return False
-
-
-def _looks_like_policy_number(value: str) -> bool:
-    """Check if value looks like a policy number rather than a carrier name.
-
-    Policy numbers typically:
-    - Are alphanumeric codes (letters + numbers mixed)
-    - Have specific patterns like "ABC12345", "12345678", "ABC-123-456"
-    - Are relatively short (< MAX_POLICY_NUMBER_LENGTH chars)
-    - Have high digit-to-letter ratio or specific prefixes
-    """
-    if not value or len(value) > MAX_POLICY_NUMBER_LENGTH:
-        return False
-
-    # Pure numeric (likely policy number)
-    digits_only = value.replace("-", "").replace(" ", "")
-    if digits_only.isdigit() and len(digits_only) >= MIN_PURE_NUMERIC_POLICY_LENGTH:
-        return True
-
-    # Count digits and letters
-    digits = sum(1 for c in value if c.isdigit())
-    letters = sum(1 for c in value if c.isalpha())
-
-    # If mostly digits with some letters, likely policy number
-    if digits >= MIN_POLICY_NUMBER_DIGITS and digits > letters:
-        return True
-
-    # Common policy number patterns
-    # - Starts with letters, ends with numbers: "PG2507405", "CSP00316270P-00"
-    # - Has dashes/hyphens with alphanumeric segments
-    val_upper = value.upper()
-    if re.match(r"^[A-Z]{1,6}\d{5,}", val_upper):  # ABC12345... or RMANAH02273P03
-        return True
-    if re.match(r"^[A-Z]{1,6}-?\d+", val_upper) and digits >= 5:  # ABC-12345
-        return True
-    if re.match(r"^\d+[A-Z]+\d*", val_upper) and digits >= 5:  # 123ABC456
-        return True
-    # Pattern with letters at end: "RMANAH02273P03"
-    if re.match(r"^[A-Z]+\d+[A-Z]*\d*$", val_upper) and digits >= 4:
-        return True
-
-    return False
-
-
-@dataclass
-class Block:
-    """A visual block in the spreadsheet (merged cell region or single cell)."""
-
-    row: int
-    col: int
-    value: Any
-    rows: int = 1
-    cols: int = 1
-    field_type: str | None = None
-    confidence: float = 0.0
 
 
 def extract_adaptive(ws) -> tuple[list[CarrierEntry], list[LayerSummary]]:
@@ -288,11 +55,11 @@ def extract_adaptive(ws) -> tuple[list[CarrierEntry], list[LayerSummary]]:
     blocks = _find_all_blocks(ws)
 
     # Step 2: Classify blocks by content
-    _classify_blocks(blocks)
+    classify_blocks(blocks)
 
     # Step 3: Detect summary/aggregate columns to exclude from carrier extraction
     # These columns contain layer-level data like "Annualized Layer Rate" not per-carrier data
-    summary_info = _detect_summary_columns(ws)
+    summary_info = detect_summary_columns(ws)
     summary_cols = summary_info["columns"]
 
     # Step 4: Find layer structure by looking for large limit values
@@ -313,148 +80,9 @@ def extract_adaptive(ws) -> tuple[list[CarrierEntry], list[LayerSummary]]:
     return entries, layer_summaries
 
 
-# Pattern for year-prefixed layer columns (e.g., "2019 Layer Premium")
-_YEAR_LAYER_PREMIUM_PATTERN = re.compile(r"^\d{4}\s+layer\s+premium", re.IGNORECASE)
-_YEAR_LAYER_RATE_PATTERN = re.compile(r"^\d{4}\s+layer\s+rate", re.IGNORECASE)
-
-
-def _check_adjacent_summary_columns(ws, row: int, start_col: int, result: dict) -> None:
-    """Check columns adjacent to year-prefixed layer premium for related summary data."""
-    for extra_col in range(start_col + 1, min(start_col + 5, ws.max_column + 1)):
-        extra_val = ws.cell(row=row, column=extra_col).value
-        if not extra_val or not isinstance(extra_val, str):
-            continue
-
-        extra_lower = extra_val.lower().strip()
-        # Check for fees, total, or tax columns
-        if extra_lower in ("fees", "total") or "tax" in extra_lower:
-            result["columns"].add(extra_col)
-        # Check for year layer rate (e.g., "2019 Layer Rate")
-        if _YEAR_LAYER_RATE_PATTERN.match(extra_lower):
-            result["columns"].add(extra_col)
-            result["layer_rate_col"] = extra_col
-
-
-def _classify_summary_column(val_lower: str, col: int, result: dict) -> None:
-    """Classify a summary column and update result dict."""
-    for pattern in SUMMARY_COLUMN_PATTERNS:
-        if pattern in val_lower:
-            result["columns"].add(col)
-            # Track specific column types for extraction
-            if "bound premium" in val_lower:
-                result["bound_premium_col"] = col
-            elif "target" in val_lower:
-                result["layer_target_col"] = col
-            elif "rate" in val_lower and "annualized" not in val_lower:
-                result["layer_rate_col"] = col
-            break
-
-
-def _detect_summary_columns(ws) -> dict:
-    """Detect columns that contain summary/aggregate data rather than per-carrier data.
-
-    These columns typically have headers like:
-    - "Annualized Layer Rate"
-    - "Layer Bound Premiums"
-    - "Layer Rates"
-    - "Layer Target"
-
-    Returns dict with:
-        - 'columns': set of column numbers to exclude from carrier extraction
-        - 'bound_premium_col': column with Layer Bound Premiums (for cross-check)
-        - 'layer_target_col': column with Layer Target
-        - 'layer_rate_col': column with Layer Rate
-    """
-    result = {
-        "columns": set(),
-        "bound_premium_col": None,
-        "layer_target_col": None,
-        "layer_rate_col": None,
-    }
-
-    # Scan header rows for summary column indicators
-    for row in range(1, MAX_HEADER_SCAN_ROW + 1):
-        for col in range(1, min(ws.max_column + 1, MAX_HEADER_SCAN_COLUMN)):
-            cell = ws.cell(row=row, column=col)
-            val = cell.value
-            if not val or not isinstance(val, str):
-                continue
-
-            # Normalize whitespace for pattern matching
-            val_lower = " ".join(val.lower().split())
-
-            # Check for year-prefixed layer premium (e.g., "2019 Layer Premium")
-            if _YEAR_LAYER_PREMIUM_PATTERN.match(val_lower):
-                result["columns"].add(col)
-                _check_adjacent_summary_columns(ws, row, col, result)
-                continue
-
-            # Check for standard summary column patterns
-            _classify_summary_column(val_lower, col, result)
-
-    return result
-
-
-def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary | None:
-    """Extract layer-level summary data from summary columns.
-
-    This data is used for cross-checking that carrier premiums sum to layer totals.
-
-    Args:
-        ws: The worksheet
-        layer: Layer dict with limit, start_row, end_row
-        summary_info: Dict with bound_premium_col, layer_target_col, layer_rate_col
-
-    Returns:
-        LayerSummary or None if no summary data found for this layer
-    """
-    bound_premium_col = summary_info.get("bound_premium_col")
-    layer_target_col = summary_info.get("layer_target_col")
-    layer_rate_col = summary_info.get("layer_rate_col")
-
-    # If no summary columns detected, skip
-    if not any([bound_premium_col, layer_target_col, layer_rate_col]):
-        return None
-
-    start_row = layer["start_row"]
-    end_row = layer["end_row"]
-
-    layer_bound_premium = None
-    layer_target = None
-    layer_rate = None
-    excel_range = None
-
-    # Look for values in summary columns within this layer's row range
-    # Summary values are typically in a specific row for each layer
-    for row in range(start_row, end_row + 1):
-        if bound_premium_col:
-            val = get_cell_value(ws, row, bound_premium_col)
-            if val is not None and isinstance(val, int | float) and val > 0:
-                layer_bound_premium = float(val)
-                excel_range = f"{get_column_letter(bound_premium_col)}{row}"
-
-        if layer_target_col:
-            val = get_cell_value(ws, row, layer_target_col)
-            if val is not None and isinstance(val, int | float) and val > 0:
-                layer_target = float(val)
-
-        if layer_rate_col:
-            val = get_cell_value(ws, row, layer_rate_col)
-            if val is not None and isinstance(val, int | float):
-                # Rate could be very small (e.g., 0.0038)
-                layer_rate = float(val)
-
-    # Only return if we found at least one value
-    if layer_bound_premium is not None or layer_target is not None or layer_rate is not None:
-        return LayerSummary(
-            layer_limit=layer["limit"],
-            layer_target=layer_target,
-            layer_rate=layer_rate,
-            layer_bound_premium=layer_bound_premium,
-            excel_range=excel_range,
-        )
-
-    return None
+# =============================================================================
+# Block Discovery
+# =============================================================================
 
 
 def _find_all_blocks(ws) -> list[Block]:
@@ -504,149 +132,9 @@ def _find_all_blocks(ws) -> list[Block]:
     return blocks
 
 
-def _classify_blocks(blocks: list[Block]) -> None:
-    """Classify each block by analyzing its content."""
-    for block in blocks:
-        block.field_type, block.confidence = _infer_type(block.value)
-
-
-def _infer_numeric_type(value: int | float) -> tuple[str, float]:
-    """Infer field type from a numeric value.
-
-    Returns:
-        Tuple of (field_type, confidence)
-    """
-    if value == 0:
-        return "zero", 0.5
-    if 0 < value <= PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
-        return "percentage", 0.9  # High confidence - typical participation format
-    if PERCENTAGE_WHOLE_NUMBER_THRESHOLD < value <= PERCENTAGE_MAX_WHOLE_NUMBER:
-        # Could be percentage as whole number, or small dollar amount
-        return "percentage_or_number", 0.6
-    if value > MILLION:
-        return "large_number", 0.8  # Likely limit or TIV
-    if value > THOUSAND:
-        return "currency", 0.7  # Likely premium
-    return "number", 0.5
-
-
-def _infer_dollar_string_type(val: str, val_lower: str) -> tuple[str, float] | None:
-    """Infer field type from a dollar-prefixed string.
-
-    Returns:
-        Tuple of (field_type, confidence) if matched, None otherwise
-    """
-    if not val.startswith("$"):
-        return None
-
-    # Check for complex expressions first
-    if any(x in val_lower for x in ["xs", "x/s", "p/o", "excess"]):
-        return "layer_description", 0.95
-    # Simple dollar amount with magnitude suffix
-    if any(c in val.upper() for c in ["M", "K", "B"]) and val.count("$") == 1:
-        return "limit", 0.9
-    # Plain dollar amount
-    rest = val[1:].replace(",", "").replace(".", "")
-    if rest.isdigit():
-        return "currency_string", 0.8
-
-    return None
-
-
-def _infer_carrier_type(val: str, val_lower: str) -> tuple[str, float] | None:
-    """Infer if value looks like a carrier name.
-
-    Returns:
-        Tuple of (field_type, confidence) if matched, None otherwise
-    """
-    # Company name heuristics for unknown carriers
-    # - Reasonable length
-    # - Not starting with $ or digit
-    # - Contains letters
-    # - May contain common suffixes
-    if not (
-        MIN_CARRIER_NAME_LENGTH <= len(val) <= MAX_CARRIER_NAME_LENGTH
-        and not val[0].isdigit()
-        and not val.startswith("$")
-        and any(c.isalpha() for c in val)
-    ):
-        return None
-
-    # Higher confidence if has company suffix
-    if any(s in val_lower for s in COMPANY_SUFFIXES):
-        return "carrier", 0.85
-    # Medium confidence for other text that looks like a name
-    if len(val) >= MIN_CARRIER_NAME_LENGTH and val[0].isupper():
-        return "carrier", 0.6
-
-    return None
-
-
-def _infer_type(value) -> tuple[str, float]:
-    """Infer field type and confidence from content alone."""
-    if value is None:
-        return None, 0.0
-
-    # Numeric analysis
-    if isinstance(value, int | float):
-        return _infer_numeric_type(value)
-
-    if not isinstance(value, str):
-        return "unknown", 0.0
-
-    val = str(value).strip()
-    if not val:
-        return None, 0.0
-
-    val_lower = val.lower()
-
-    # Dollar amounts with M/K/B suffix (layer limits)
-    dollar_result = _infer_dollar_string_type(val, val_lower)
-    if dollar_result:
-        return dollar_result
-
-    # Percentage string
-    if val.endswith("%"):
-        return "percentage_string", 0.9
-
-    # Look for terms/coverage indicators
-    if any(p in val_lower for p in COVERAGE_PATTERNS):
-        return "terms", 0.85
-
-    # Common label patterns
-    if val_lower in LABEL_PATTERNS or any(val_lower.startswith(p) for p in LABEL_PATTERNS):
-        return "label", 0.9
-
-    # Status indicators
-    if val_lower in STATUS_VALUES:
-        return "status", 0.8
-
-    # Catch patterns like "% Premium" - labels starting with symbols
-    if val.startswith("%"):
-        return "label", 0.7
-
-    # Policy number patterns - alphanumeric codes with specific formats
-    if _looks_like_policy_number(val):
-        return "policy_number", 0.85
-
-    # Check against known non-carrier terms (from YAML)
-    if _is_non_carrier(val):
-        return "label", 0.7
-
-    # Very short strings (1-3 chars) are unlikely to be carrier names
-    if len(val) <= 3 and not _is_known_carrier(val):
-        return "label", 0.6
-
-    # Check against known carrier names (from YAML) - fuzzy match
-    if _is_known_carrier(val):
-        return "carrier", 0.9
-
-    # Check carrier name heuristics
-    carrier_result = _infer_carrier_type(val, val_lower)
-    if carrier_result:
-        return carrier_result
-
-    return "text", 0.3
+# =============================================================================
+# Layer Identification
+# =============================================================================
 
 
 def _has_conflicting_label(block: Block, other: Block) -> bool:
@@ -768,6 +256,78 @@ def _format_limit(value) -> str:
     return str(value)
 
 
+# =============================================================================
+# Layer Summary Extraction
+# =============================================================================
+
+
+def _extract_layer_summary(ws, layer: dict, summary_info: dict) -> LayerSummary | None:
+    """Extract layer-level summary data from summary columns.
+
+    This data is used for cross-checking that carrier premiums sum to layer totals.
+
+    Args:
+        ws: The worksheet
+        layer: Layer dict with limit, start_row, end_row
+        summary_info: Dict with bound_premium_col, layer_target_col, layer_rate_col
+
+    Returns:
+        LayerSummary or None if no summary data found for this layer
+    """
+    bound_premium_col = summary_info.get("bound_premium_col")
+    layer_target_col = summary_info.get("layer_target_col")
+    layer_rate_col = summary_info.get("layer_rate_col")
+
+    # If no summary columns detected, skip
+    if not any([bound_premium_col, layer_target_col, layer_rate_col]):
+        return None
+
+    start_row = layer["start_row"]
+    end_row = layer["end_row"]
+
+    layer_bound_premium = None
+    layer_target = None
+    layer_rate = None
+    excel_range = None
+
+    # Look for values in summary columns within this layer's row range
+    # Summary values are typically in a specific row for each layer
+    for row in range(start_row, end_row + 1):
+        if bound_premium_col:
+            val = get_cell_value(ws, row, bound_premium_col)
+            if val is not None and isinstance(val, int | float) and val > 0:
+                layer_bound_premium = float(val)
+                excel_range = f"{get_column_letter(bound_premium_col)}{row}"
+
+        if layer_target_col:
+            val = get_cell_value(ws, row, layer_target_col)
+            if val is not None and isinstance(val, int | float) and val > 0:
+                layer_target = float(val)
+
+        if layer_rate_col:
+            val = get_cell_value(ws, row, layer_rate_col)
+            if val is not None and isinstance(val, int | float):
+                # Rate could be very small (e.g., 0.0038)
+                layer_rate = float(val)
+
+    # Only return if we found at least one value
+    if layer_bound_premium is not None or layer_target is not None or layer_rate is not None:
+        return LayerSummary(
+            layer_limit=layer["limit"],
+            layer_target=layer_target,
+            layer_rate=layer_rate,
+            layer_bound_premium=layer_bound_premium,
+            excel_range=excel_range,
+        )
+
+    return None
+
+
+# =============================================================================
+# Layer Data Extraction
+# =============================================================================
+
+
 def _split_multiline_carrier(carrier_block: Block) -> list[tuple[Block, str]]:
     """Split a carrier block containing multiple carriers (newlines) into separate blocks.
 
@@ -879,6 +439,11 @@ def _extract_layer_data(
             entries.append(entry)
 
     return entries
+
+
+# =============================================================================
+# Header and Label Detection
+# =============================================================================
 
 
 def _filter_label_blocks(
@@ -1029,216 +594,8 @@ def _classify_row_label(val_lower: str, row: int, labels: dict) -> None:
 
 
 # =============================================================================
-# Proximity Matching Helpers
+# Entry Building
 # =============================================================================
-
-
-def _get_column_range(block: Block) -> range:
-    """Get the range of columns spanned by a block."""
-    return range(block.col, block.col + block.cols)
-
-
-def _columns_overlap(range1: range, range2: range) -> bool:
-    """Check if two column ranges overlap using efficient set intersection."""
-    return bool(set(range1) & set(range2))
-
-
-def _calculate_block_proximity(block: Block, carrier: Block, carrier_col_range: range) -> tuple:
-    """Calculate proximity score for sorting blocks by relevance to carrier.
-
-    Returns:
-        Tuple of (not_column_aligned, row_distance) for sorting.
-        Lower values = higher priority.
-    """
-    block_col_range = _get_column_range(block)
-    col_overlap = _columns_overlap(block_col_range, carrier_col_range)
-    row_dist = abs(block.row - carrier.row)
-    return (not col_overlap, row_dist)
-
-
-def _is_block_relevant(
-    block: Block, carrier: Block, carrier_col_range: range, row_range: range
-) -> bool:
-    """Check if a data block is relevant to a carrier based on spatial proximity.
-
-    A block is relevant if:
-    - It's in the carrier's column range, OR
-    - It's in the same row (±1) and within MAX_COLUMN_DISTANCE columns
-    """
-    block_col_range = _get_column_range(block)
-    in_col = _columns_overlap(block_col_range, carrier_col_range)
-
-    if in_col:
-        return True
-
-    # For non-column-aligned blocks, require same row and close proximity
-    if abs(block.row - carrier.row) <= 1 and abs(block.col - carrier.col) <= MAX_COLUMN_DISTANCE:
-        return True
-
-    return False
-
-
-def _match_participation_block(
-    block: Block, row_labels: dict | None, rate_col: int | None
-) -> float | None:
-    """Try to match a percentage block as participation.
-
-    Returns:
-        Normalized participation percentage (0-1) or None if not a match.
-    """
-    # Skip Rate column - rates are NOT participation percentages
-    if rate_col and block.col == rate_col:
-        return None
-
-    participation_row = row_labels.get("participation_row") if row_labels else None
-
-    if participation_row:
-        # Only accept values from participation row (or row below)
-        if block.row == participation_row or block.row == participation_row + 1:
-            return _normalize_percentage(block.value)
-        return None
-    else:
-        # No participation_row label - use proximity-based matching
-        return _normalize_percentage(block.value)
-
-
-def _should_skip_currency_block(
-    block: Block,
-    column_headers: dict | None,
-    row_labels: dict | None,
-) -> bool:
-    """Check if a currency block should be skipped based on its position."""
-    # Skip TIV columns
-    tiv_col = column_headers.get("tiv_col") if column_headers else None
-    tiv_data_col = column_headers.get("tiv_data_col") if column_headers else None
-    if tiv_col and block.col == tiv_col:
-        return True
-    if tiv_data_col and block.col == tiv_data_col:
-        return True
-
-    # Skip policy number row
-    policy_row = row_labels.get("policy_row") if row_labels else None
-    if policy_row and block.row == policy_row:
-        return True
-
-    # Skip Limit column
-    limit_col = column_headers.get("limit_col") if column_headers else None
-    if limit_col and block.col == limit_col:
-        return True
-
-    return False
-
-
-def _is_row_match(block_row: int, target_row: int | None) -> bool:
-    """Check if block row matches target row or adjacent row."""
-    if target_row is None:
-        return False
-    return block_row == target_row or block_row == target_row + 1
-
-
-def _match_currency_by_row(
-    block: Block,
-    val: float,
-    row_labels: dict | None,
-    current_premium: float | None,
-    current_premium_share: float | None,
-) -> tuple[float | None, float | None, bool]:
-    """Try to match currency value by row labels.
-
-    Returns:
-        Tuple of (premium, premium_share, matched) where matched indicates if a match was found.
-    """
-    percent_premium_row = row_labels.get("percent_premium_row") if row_labels else None
-    premium_row = row_labels.get("premium_row") if row_labels else None
-    limit_row = row_labels.get("limit_row") if row_labels else None
-
-    # Check for % Premium / Share Premium row (carrier's share)
-    if _is_row_match(block.row, percent_premium_row):
-        if current_premium is None:
-            return val, current_premium_share, True
-        return current_premium, current_premium_share, True
-
-    # Check for Premium row (layer total)
-    if _is_row_match(block.row, premium_row):
-        if percent_premium_row:
-            # Skip layer totals when we have % Premium row
-            return current_premium, current_premium_share, True
-        if current_premium is None:
-            return val, current_premium_share, True
-        return current_premium, current_premium_share, True
-
-    # Check for LIMIT row
-    if limit_row and block.row == limit_row:
-        if current_premium is None:
-            return val, current_premium_share, True
-        return current_premium, current_premium_share, True
-
-    return current_premium, current_premium_share, False
-
-
-def _match_currency_by_column(
-    block: Block,
-    val: float,
-    column_headers: dict | None,
-    current_premium: float | None,
-    current_premium_share: float | None,
-) -> tuple[float | None, float | None]:
-    """Match currency value by column headers with fallback logic."""
-    premium_col = column_headers.get("premium_col") if column_headers else None
-    premium_share_col = column_headers.get("premium_share_col") if column_headers else None
-
-    # Check for premium_col column header
-    if premium_col and block.col == premium_col:
-        if current_premium is None:
-            return val, current_premium_share
-        return current_premium, current_premium_share
-    elif premium_col:
-        # We have a premium_col but this block isn't in it - skip
-        return current_premium, current_premium_share
-
-    # Fallback to column-based logic
-    if premium_share_col and block.col == premium_share_col:
-        if current_premium_share is None:
-            return current_premium, val
-    elif current_premium is None:
-        return val, current_premium_share
-    elif current_premium_share is None:
-        return current_premium, val
-
-    return current_premium, current_premium_share
-
-
-def _match_currency_block(
-    block: Block,
-    column_headers: dict | None,
-    row_labels: dict | None,
-    current_premium: float | None,
-    current_premium_share: float | None,
-) -> tuple[float | None, float | None]:
-    """Try to match a currency block as premium or premium_share.
-
-    Returns:
-        Tuple of (premium, premium_share) with updated values.
-    """
-    # Check if block should be skipped
-    if _should_skip_currency_block(block, column_headers, row_labels):
-        return current_premium, current_premium_share
-
-    val = _parse_currency(block.value)
-    if val is None:
-        return current_premium, current_premium_share
-
-    # Try row-based matching first
-    premium, premium_share, matched = _match_currency_by_row(
-        block, val, row_labels, current_premium, current_premium_share
-    )
-    if matched:
-        return premium, premium_share
-
-    # Fall back to column-based matching
-    return _match_currency_by_column(
-        block, val, column_headers, current_premium, current_premium_share
-    )
 
 
 def _build_entry_from_proximity(
@@ -1265,7 +622,7 @@ def _build_entry_from_proximity(
         CarrierEntry with extracted data
     """
     # Define search ranges
-    carrier_col_range = _get_column_range(carrier)
+    carrier_col_range = get_column_range(carrier)
     row_range = range(carrier.row, min(carrier.row + MAX_ROW_SEARCH_DISTANCE, layer["end_row"] + 1))
 
     # Initialize extracted values
@@ -1281,24 +638,24 @@ def _build_entry_from_proximity(
     # Sort data blocks by proximity to carrier
     sorted_blocks = sorted(
         data_blocks,
-        key=lambda b: _calculate_block_proximity(b, carrier, carrier_col_range),
+        key=lambda b: calculate_block_proximity(b, carrier, carrier_col_range),
     )
 
     # Process each block
     for block in sorted_blocks:
         # Skip blocks that aren't relevant to this carrier
-        if not _is_block_relevant(block, carrier, carrier_col_range, row_range):
+        if not is_block_relevant(block, carrier, carrier_col_range, row_range):
             continue
 
         # Match percentage blocks (participation)
         if block.field_type in ("percentage", "percentage_or_number") and participation is None:
-            matched = _match_participation_block(block, row_labels, rate_col)
+            matched = match_participation_block(block, row_labels, rate_col)
             if matched is not None:
                 participation = matched
 
         # Match currency blocks (premium)
         elif block.field_type in ("currency", "currency_string", "large_number", "zero"):
-            premium, premium_share = _match_currency_block(
+            premium, premium_share = match_currency_block(
                 block, column_headers, row_labels, premium, premium_share
             )
 
@@ -1336,41 +693,9 @@ def _build_entry_from_proximity(
     )
 
 
-def _normalize_percentage(value) -> float:
-    """Normalize a percentage value to 0-1 range."""
-    if value is None:
-        return None
-
-    if isinstance(value, str):
-        val_str = value.replace("%", "").strip()
-        try:
-            value = float(val_str)
-        except ValueError:
-            return None
-
-    if not isinstance(value, int | float):
-        return None
-
-    # If > 1, assume it's a whole number percentage
-    if value > PERCENTAGE_WHOLE_NUMBER_THRESHOLD:
-        return value / 100
-
-    return float(value)
-
-
-def _parse_currency(value) -> float:
-    """Parse a currency value."""
-    if isinstance(value, int | float):
-        return float(value)
-
-    if isinstance(value, str):
-        val_str = value.replace("$", "").replace(",", "").strip()
-        try:
-            return float(val_str)
-        except ValueError:
-            return None
-
-    return None
+# =============================================================================
+# Workbook Loading
+# =============================================================================
 
 
 def _load_workbook(filepath: str, sheet_name: str | None = None) -> Any:
@@ -1412,6 +737,11 @@ def _load_workbook(filepath: str, sheet_name: str | None = None) -> Any:
             raise ValueError(f"Sheet '{sheet_name}' not found. Available sheets: {available}")
         return wb[sheet_name]
     return wb.active
+
+
+# =============================================================================
+# Public API
+# =============================================================================
 
 
 def extract_schematic(filepath: str, sheet_name: str | None = None) -> list[dict]:
@@ -1470,3 +800,5 @@ def extract_schematic_with_summaries(
     ws = _load_workbook(filepath, sheet_name)
     entries, summaries = extract_adaptive(ws)
     return ([entry.to_dict() for entry in entries], [summary.to_dict() for summary in summaries])
+
+
