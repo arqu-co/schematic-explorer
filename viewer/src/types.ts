@@ -11,7 +11,7 @@ export interface CarrierEntry {
   layer_limit: string;
   /** Layer description (e.g., "Primary", "Excess") */
   layer_description: string;
-  /** Carrier/insurer name */
+  /** Original carrier/insurer name from spreadsheet (e.g., "ACE American") */
   carrier: string;
   /** Participation percentage as decimal (0.25 = 25%) */
   participation_pct: number | null;
@@ -33,6 +33,8 @@ export interface CarrierEntry {
   fill_color: string | null;
   /** Attachment point (e.g., "$50M xs. $25M") */
   attachment_point: string | null;
+  /** Resolved canonical carrier name (e.g., "Chubb" for "ACE American") */
+  canonical_carrier: string | null;
 }
 
 /**

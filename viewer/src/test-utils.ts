@@ -21,6 +21,7 @@ export const defaultCarrierEntry: CarrierEntry = {
   row_span: 1,
   fill_color: null,
   attachment_point: null,
+  canonical_carrier: null,
 };
 
 /**
