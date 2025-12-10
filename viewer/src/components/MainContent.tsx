@@ -13,8 +13,13 @@ import { getInputExcelUrl } from '../api';
 // Tower Visualization
 // =============================================================================
 
+/**
+ * Props for the TowerVisualization component.
+ */
 interface TowerVisualizationProps {
+  /** Layers to display in the tower */
   layers: Layer[];
+  /** Optional callback when a carrier cell is clicked */
   onCellClick?: (entry: CarrierEntry) => void;
 }
 
@@ -91,7 +96,11 @@ function TowerVisualization({ layers, onCellClick }: TowerVisualizationProps) {
 // Carrier Table
 // =============================================================================
 
+/**
+ * Props for the CarrierTable component.
+ */
 interface CarrierTableProps {
+  /** Carrier entries to display in the table */
   entries: CarrierEntry[];
 }
 
@@ -139,8 +148,13 @@ function CarrierTable({ entries }: CarrierTableProps) {
 // Excel Viewer
 // =============================================================================
 
+/**
+ * Props for the ExcelViewer component.
+ */
 interface ExcelViewerProps {
+  /** File stem to load Excel data from */
   stem: string;
+  /** Optional Excel range to highlight (e.g., "B5:D7") */
   highlightRange?: string | null;
 }
 
@@ -237,16 +251,30 @@ function ExcelViewer({ stem, highlightRange }: ExcelViewerProps) {
 // Main Content Component
 // =============================================================================
 
+/**
+ * Props for the MainContent component.
+ */
 interface MainContentProps {
+  /** All carrier entries for the selected file */
   entries: CarrierEntry[];
+  /** Entries grouped by layer for tower view */
   layers: Layer[];
+  /** File stem for loading Excel data */
   stem: string;
+  /** Currently active tab (tower, table, json, excel) */
   activeTab: string;
+  /** Callback when tab is changed */
   onTabChange: (tab: string) => void;
+  /** Entry to highlight in Excel view, or null */
   highlightEntry: CarrierEntry | null;
+  /** Callback when a carrier cell is clicked */
   onCellClick: (entry: CarrierEntry) => void;
 }
 
+/**
+ * Main content area with tab views for exploring schematic data.
+ * Supports tower visualization, table view, raw JSON, and Excel preview.
+ */
 export function MainContent({
   entries,
   layers,

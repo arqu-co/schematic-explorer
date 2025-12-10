@@ -6,9 +6,15 @@ import { Heading, Box, ScrollArea, Flex, Card, Text, Badge } from '@radix-ui/the
 import type { SchematicFile } from '../types';
 import { formatCurrency, groupByLayer } from '../utils';
 
+/**
+ * Props for the SchematicCard component.
+ */
 interface SchematicCardProps {
+  /** The schematic file to display */
   file: SchematicFile;
+  /** Callback when the card is clicked */
   onSelect: () => void;
+  /** Whether this card is currently selected */
   isSelected: boolean;
 }
 
@@ -57,12 +63,22 @@ function SchematicCard({ file, onSelect, isSelected }: SchematicCardProps) {
   );
 }
 
+/**
+ * Props for the FileList component.
+ */
 interface FileListProps {
+  /** List of schematic files to display */
   files: SchematicFile[];
+  /** Currently selected file, or null if none selected */
   selectedFile: SchematicFile | null;
+  /** Callback when a file is selected */
   onFileSelect: (file: SchematicFile) => void;
 }
 
+/**
+ * File list sidebar component displaying available schematic files.
+ * Shows carrier count, layer count, total premium, and verification score for each file.
+ */
 export function FileList({ files, selectedFile, onFileSelect }: FileListProps) {
   return (
     <Box className="sidebar-left">

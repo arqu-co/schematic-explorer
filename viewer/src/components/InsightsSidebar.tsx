@@ -5,7 +5,11 @@
 import { Heading, Box, Flex, Badge, Text } from '@radix-ui/themes';
 import Markdown from 'react-markdown';
 
+/**
+ * Props for the InsightsPanel component.
+ */
 interface InsightsPanelProps {
+  /** Markdown insights content, or null if unavailable */
   insights: string | null;
 }
 
@@ -31,10 +35,18 @@ function InsightsPanel({ insights }: InsightsPanelProps) {
   );
 }
 
+/**
+ * Props for the InsightsSidebar component.
+ */
 interface InsightsSidebarProps {
+  /** Markdown insights content, or null if unavailable */
   insights: string | null;
 }
 
+/**
+ * Sidebar component displaying AI-generated verification insights.
+ * Shows accuracy score badge and renders insights as markdown.
+ */
 export function InsightsSidebar({ insights }: InsightsSidebarProps) {
   return (
     <Box className="sidebar-right">
