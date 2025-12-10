@@ -752,7 +752,6 @@ def cross_check_layer_totals(
             carrier_totals_by_layer[layer] += entry.premium
 
     # Cross-check
-    total_discrepancy = 0.0
     discrepancies_found = 0
 
     for layer_limit, summary in summary_by_layer.items():
