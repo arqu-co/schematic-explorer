@@ -19,8 +19,8 @@ from .carriers import (
 )
 from .types import MILLION, THOUSAND
 
-# Type alias for inference results
-TypeInference = tuple[str | None, float]
+# Type alias for inference results: (data_type, numeric_value)
+TypeInferenceResult = tuple[str | None, float]
 
 # =============================================================================
 # Constants
@@ -92,7 +92,7 @@ class Block:
 # =============================================================================
 
 
-def _infer_numeric_type(value: int | float) -> TypeInference:
+def _infer_numeric_type(value: int | float) -> TypeInferenceResult:
     """Infer field type from a numeric value.
 
     Returns:
@@ -112,7 +112,7 @@ def _infer_numeric_type(value: int | float) -> TypeInference:
     return "number", 0.5
 
 
-def _infer_dollar_string_type(val: str, val_lower: str) -> TypeInference | None:
+def _infer_dollar_string_type(val: str, val_lower: str) -> TypeInferenceResult | None:
     """Infer field type from a dollar-prefixed string.
 
     Returns:
@@ -135,7 +135,7 @@ def _infer_dollar_string_type(val: str, val_lower: str) -> TypeInference | None:
     return None
 
 
-def _infer_carrier_type(val: str, val_lower: str) -> TypeInference | None:
+def _infer_carrier_type(val: str, val_lower: str) -> TypeInferenceResult | None:
     """Infer if value looks like a carrier name.
 
     Returns:
@@ -164,7 +164,7 @@ def _infer_carrier_type(val: str, val_lower: str) -> TypeInference | None:
     return None
 
 
-def _infer_type(value: Any) -> TypeInference:
+def _infer_type(value: Any) -> TypeInferenceResult:
     """Infer field type and confidence from content alone."""
     if value is None:
         return None, 0.0
