@@ -614,7 +614,84 @@ def _classify_row_label(val_lower: str, row: int, labels: dict) -> None:
 
 
 # =============================================================================
-# Entry Building
+# Entry Building - Helper Functions
+# =============================================================================
+
+
+def _match_participation_in_block(
+    block: Block,
+    row_labels: dict | None,
+    rate_col: int | None,
+) -> float | None:
+    """Try to match a percentage block as participation.
+
+    Args:
+        block: The block to match
+        row_labels: Dict of row label positions
+        rate_col: Column number for rate (to exclude)
+
+    Returns:
+        Normalized participation (0-1) or None if not a match
+    """
+    if block.field_type not in ("percentage", "percentage_or_number"):
+        return None
+    return match_participation_block(block, row_labels, rate_col)
+
+
+def _match_premium_in_block(
+    block: Block,
+    column_headers: dict | None,
+    row_labels: dict | None,
+    current_premium: float | None,
+    current_premium_share: float | None,
+) -> tuple[float | None, float | None]:
+    """Try to match a currency block as premium/premium_share.
+
+    Args:
+        block: The block to match
+        column_headers: Dict of column header positions
+        row_labels: Dict of row label positions
+        current_premium: Currently matched premium value
+        current_premium_share: Currently matched premium share value
+
+    Returns:
+        Tuple of (premium, premium_share) with updated values
+    """
+    if block.field_type not in ("currency", "currency_string", "large_number", "zero"):
+        return current_premium, current_premium_share
+    return match_currency_block(block, column_headers, row_labels, current_premium, current_premium_share)
+
+
+def _match_terms_in_block(block: Block) -> str | None:
+    """Try to match a terms block.
+
+    Args:
+        block: The block to match
+
+    Returns:
+        Terms string or None if not a match
+    """
+    if block.field_type != "terms":
+        return None
+    return str(block.value).strip()
+
+
+def _match_layer_description_in_block(block: Block) -> str | None:
+    """Try to match a layer description block.
+
+    Args:
+        block: The block to match
+
+    Returns:
+        Layer description string or None if not a match
+    """
+    if block.field_type != "layer_description":
+        return None
+    return str(block.value).strip()
+
+
+# =============================================================================
+# Entry Building - Main Function
 # =============================================================================
 
 
@@ -661,31 +738,39 @@ def _build_entry_from_proximity(
         key=lambda b: calculate_block_proximity(b, carrier, carrier_col_range),
     )
 
-    # Process each block
+    # Process each block using helper functions
     for block in sorted_blocks:
         # Skip blocks that aren't relevant to this carrier
         if not is_block_relevant(block, carrier, carrier_col_range):
             continue
 
         # Match percentage blocks (participation)
-        if block.field_type in ("percentage", "percentage_or_number") and participation is None:
-            matched = match_participation_block(block, row_labels, rate_col)
+        if participation is None:
+            matched = _match_participation_in_block(block, row_labels, rate_col)
             if matched is not None:
                 participation = matched
+                continue
 
         # Match currency blocks (premium)
-        elif block.field_type in ("currency", "currency_string", "large_number", "zero"):
-            premium, premium_share = match_currency_block(
-                block, column_headers, row_labels, premium, premium_share
-            )
+        new_premium, new_premium_share = _match_premium_in_block(
+            block, column_headers, row_labels, premium, premium_share
+        )
+        if new_premium != premium or new_premium_share != premium_share:
+            premium, premium_share = new_premium, new_premium_share
+            continue
 
         # Match terms
-        elif block.field_type == "terms" and terms is None:
-            terms = str(block.value).strip()
+        if terms is None:
+            matched_terms = _match_terms_in_block(block)
+            if matched_terms is not None:
+                terms = matched_terms
+                continue
 
         # Match layer description
-        elif block.field_type == "layer_description" and layer_desc is None:
-            layer_desc = str(block.value).strip()
+        if layer_desc is None:
+            matched_desc = _match_layer_description_in_block(block)
+            if matched_desc is not None:
+                layer_desc = matched_desc
 
     # Build cell reference
     cell_ref = original_cell if original_cell else f"{get_column_letter(carrier.col)}{carrier.row}"
